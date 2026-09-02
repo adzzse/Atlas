@@ -1428,8 +1428,9 @@ const App = () => {
         setImportProgress({ text: 'Refreshing media…', progress: 0, total: 0 })
         const result = await window.electronAPI.refreshMediaLibrary({ mode })
         if (result?.success === false) throw new Error(result.error || 'Media refresh failed')
+        const failedSuffix = result?.failed > 0 ? `; ${result.failed} image(s) failed` : ''
         setImportProgress({
-          text: `Media refresh complete (${result?.processed || 0}/${result?.total || 0}).`,
+          text: `Media refresh complete (${result?.processed || 0}/${result?.total || 0}${failedSuffix}).`,
           progress: result?.processed || 0,
           total: result?.total || 0,
         })

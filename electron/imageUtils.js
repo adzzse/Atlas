@@ -106,6 +106,7 @@ const ALREADY_COMPRESSED_FORMATS = new Set(["webp", "avif"]);
 // Sentinel returned by conditionalFetchImage when the origin says 304 Not
 // Modified, so callers can skip all work for that asset.
 const NOT_MODIFIED = Symbol("not-modified");
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000;
 
 // Fetch an image with HTTP validators. If we hold a cached etag/last-modified
 // for this (record,url), send them as If-None-Match / If-Modified-Since; a 304
@@ -124,6 +125,10 @@ async function conditionalFetchImage(url, { cache, extraHeaders } = {}) {
   const response = await axios.get(url, {
     responseType: "arraybuffer",
     maxRedirects: 5,
+    // A total deadline prevents a CDN that keeps dribbling bytes from holding a
+    // whole media refresh open indefinitely; axios timeout also covers stalls.
+    timeout: IMAGE_DOWNLOAD_TIMEOUT_MS,
+    signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS),
     // Treat 304 (not modified) and 429/503 (rate limited) as non-throwing so we
     // can detect and report them rather than swallowing a generic axios error.
     validateStatus: (status) =>
@@ -344,6 +349,7 @@ async function downloadImages(
     skipped: false,
     skipReasons: [],
     errors: [],
+    failed: 0,
   };
 
   let imageProgress = 0;
@@ -377,11 +383,13 @@ async function downloadImages(
   const addError = (label, err) => {
     const message = `${label}: ${err?.message || err}`;
     result.success = false;
+    result.failed++;
     requiredErrorCount++;
     result.errors.push(message);
   };
   const addOptionalError = (label, err) => {
     const message = `${label}: ${err?.message || err}`;
+    result.failed++;
     result.errors.push(message);
   };
   const reportProgress = () => {
@@ -406,6 +414,8 @@ async function downloadImages(
   if (bannerUrl && isSourceBlocked(bannerSource)) {
     result.skipped = true;
     result.skipReasons.push(`banner skipped: ${bannerSource} rate-limited`);
+    imageProgress += 2;
+    reportProgress();
   } else if (bannerUrl) {
     console.log(`Downloading banner from URL: ${bannerUrl}`);
     try {
@@ -429,7 +439,9 @@ async function downloadImages(
       let imageBytes;
       let downloaded = false;
       let bannerNotModified = false;
+      let imageLoadError = null;
       const loadImageBytes = async () => {
+        if (imageLoadError) throw imageLoadError;
         if (!imageBytes && !bannerNotModified) {
           const cache = (getMediaSourceCache && bannerDerivativesPresent)
             ? await getMediaSourceCache(recordId, bannerUrl)
@@ -437,6 +449,9 @@ async function downloadImages(
           const res = await conditionalFetchImage(bannerUrl, {
             cache,
             extraHeaders: withAuthCookie(bannerUrl, {}),
+          }).catch((err) => {
+            imageLoadError = err;
+            throw err;
           });
           if (res.rateLimited) {
             markSourceRateLimited(bannerSource, res.retryAfterMs);
@@ -519,6 +534,7 @@ async function downloadImages(
             }
           }
         } catch (animatedErr) {
+          if (imageLoadError) throw animatedErr;
           console.warn(
             `Failed to create animated WebP banner for ${recordId}:`,
             animatedErr,
@@ -572,6 +588,8 @@ async function downloadImages(
         console.error("Error downloading or converting banner:", err);
         addError("Banner", err);
       }
+      imageProgress += 2;
+      reportProgress();
     }
   }
 
@@ -588,6 +606,8 @@ async function downloadImages(
     if (isSourceBlocked(previewSource)) {
       result.skipped = true;
       result.skipReasons.push(`preview ${i + 1} skipped: ${previewSource} rate-limited`);
+      imageProgress++;
+      reportProgress();
       continue;
     }
 
@@ -610,7 +630,9 @@ async function downloadImages(
       let imageBytes;
       let downloaded = false;
       let previewNotModified = false;
+      let imageLoadError = null;
       const loadImageBytes = async () => {
+        if (imageLoadError) throw imageLoadError;
         if (!imageBytes && !previewNotModified) {
           const cache = (getMediaSourceCache && previewDerivativePresent)
             ? await getMediaSourceCache(recordId, url)
@@ -618,6 +640,9 @@ async function downloadImages(
           const res = await conditionalFetchImage(url, {
             cache,
             extraHeaders: withAuthCookie(url, {}),
+          }).catch((err) => {
+            imageLoadError = err;
+            throw err;
           });
           if (res.rateLimited) {
             markSourceRateLimited(previewSource, res.retryAfterMs);
@@ -695,6 +720,7 @@ async function downloadImages(
             }
           }
         } catch (animatedErr) {
+          if (imageLoadError) throw animatedErr;
           console.warn(
             `Failed to create animated WebP preview for ${recordId} from ${url}:`,
             animatedErr,
@@ -736,6 +762,8 @@ async function downloadImages(
         console.error(`Error downloading or converting screen ${i + 1}:`, err);
         addError(`Preview ${i + 1}`, err);
       }
+      imageProgress++;
+      reportProgress();
     }
   }
 
@@ -766,6 +794,8 @@ async function downloadImages(
       const response = async () => axios.get(url, {
         responseType: "arraybuffer",
         maxRedirects: 5,
+        timeout: IMAGE_DOWNLOAD_TIMEOUT_MS,
+        signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS),
         headers: withAuthCookie(url, {
           "User-Agent": "Atlas/1.0 (+https://github.com/towerwatchman/Atlas)",
           Accept: isVideo

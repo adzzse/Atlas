@@ -285,6 +285,7 @@ export default function MediaTab({
                     <SafeImage
                       src={url}
                       alt={`Preview ${index + 1}`}
+                      loading="lazy"
                       className="w-full aspect-video object-contain bg-primary rounded cursor-move"
                       style={{ opacity: dragIndex === index ? 0.5 : 1 }}
                       fallbackLabel="Preview unavailable"

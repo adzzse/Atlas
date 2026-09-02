@@ -10,7 +10,6 @@ import { sanitizePercentText } from '../../utils/formatPercent.js'
 import { effectiveTitlePlaystate } from '../../utils/playstates.js'
 import { formatVersionDate } from '../../utils/formatVersionDate.js'
 import { formatReleaseDate } from './page/gameDetailUtils.js'
-import { toMediaSrc } from '../../utils/mediaSrc.js'
 
 const isRemoteMediaUrl = (url) => /^https?:\/\//i.test(String(url || ''))
 const firstMediaUrl = (value) => Array.isArray(value) ? value[0] || '' : value || ''
@@ -196,7 +195,6 @@ const GameDetailWindow = () => {
   const [versionData, setVersionData] = useState(EMPTY_VERSION)
   const [bannerUrl, setBannerUrl] = useState('')
   const [previewUrls, setPreviewUrls] = useState([])
-  const [validPreviewUrls, setValidPreviewUrls] = useState([])
   const [importProgress, setImportProgress] = useState({ text: '', progress: 0, total: 0 })
   const [isMaximized, setIsMaximized] = useState(false)
   const [activeTab, setActiveTab] = useState('Record')
@@ -358,21 +356,6 @@ const GameDetailWindow = () => {
     }
   }, [game?.record_id, selectedVersion])
 
-  useEffect(() => {
-    Promise.all(
-      (previewUrls || []).map(async (p) => {
-        const url = p?.url || p
-        try {
-          const img = new Image(); img.src = toMediaSrc(url)
-          await new Promise((res, rej) => { img.onload = res; img.onerror = rej })
-          return p
-        } catch { return null }
-      })
-    ).then((results) => {
-      setValidPreviewUrls(results.filter(Boolean))
-    })
-  }, [previewUrls])
-
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleDownloadBanner = async () => {
     setImportProgress({ text: 'Starting banner download...', progress: 0, total: 1 })
@@ -497,6 +480,12 @@ const GameDetailWindow = () => {
       // enriched meta objects, so re-fetch via the meta handler.
       const refreshedPreviews = await window.electronAPI.getPreviewsMeta(game.record_id)
       setPreviewUrls(Array.isArray(refreshedPreviews) ? refreshedPreviews : [])
+      if (result?.failed > 0) {
+        showAlert(
+          'Media refresh incomplete',
+          `${result.failed} image(s) could not be downloaded. Atlas skipped them and kept the successful files.\n\n${result.errors?.[0] || ''}`,
+        )
+      }
     } catch (err) {
       alert(`Failed to refresh media links: ${err.message}`)
       setImportProgress({ text: '', progress: 0, total: 0 })
@@ -962,8 +951,8 @@ const GameDetailWindow = () => {
   const bannerMediaStatus = bannerUrl
     ? isRemoteMediaUrl(bannerUrl) ? 'Streaming from the web' : 'Downloaded to local storage'
     : 'No banner available'
-  const previewMediaStatus = validPreviewUrls.length > 0
-    ? validPreviewUrls.some((p) => isRemoteMediaUrl(p?.url || p)) ? 'Streaming from the web' : 'Downloaded to local storage'
+  const previewMediaStatus = previewUrls.length > 0
+    ? previewUrls.some((p) => isRemoteMediaUrl(p?.url || p)) ? 'Streaming from the web' : 'Downloaded to local storage'
     : 'No previews available'
 
   // ── Loading state ─────────────────────────────────────────────────────────
@@ -1051,7 +1040,7 @@ const GameDetailWindow = () => {
                 game={game}
                 bannerUrl={bannerUrl}
                 bannerMediaStatus={bannerMediaStatus}
-                validPreviewUrls={validPreviewUrls}
+                validPreviewUrls={previewUrls}
                 previewMediaStatus={previewMediaStatus}
                 importProgress={importProgress}
                 onDownloadBanner={handleDownloadBanner}

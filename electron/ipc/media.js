@@ -486,12 +486,11 @@ module.exports = function registerMediaHandlers(ctx) {
 
   // Shared media-refresh core, used by both the per-game refresh (detail page)
   // and the library-wide refresh (nav "Updates"). Options:
-  //   mode: 'missing' -> only fetch/download what's absent; 'all' -> overwrite.
+  //   mode: 'missing' avoids unnecessary metadata fetches; image derivatives
+  //         are always checked individually and existing files stay untouched.
   //   download: whether to pull images to disk (true) or leave them streamed
   //             (false). Determined by the mediaStorageMode setting.
   const refreshOneGame = async (recordId, { mode = 'all', download = false, onProgress, blockedSources, onRateLimited } = {}) => {
-    const missingOnly = mode === 'missing'
-
     // 0) Resolve every source's id up front (cheap DB reads, run in parallel).
     //    A source with no id gets skipped entirely below — we never fetch its
     //    metadata and never try to pull its images. Existing local images for a
@@ -554,42 +553,35 @@ module.exports = function registerMediaHandlers(ctx) {
     // 2) Images: only pull to disk when the setting says 'download'. When
     //    streaming, we skip downloadImages entirely and let the *_data URLs be
     //    served directly (previews still come back via getPreviews below).
+    let downloadResult = null
     if (download) {
-      // In 'missing' mode, skip the download when the banner + previews are
-      // already present on disk for this record.
-      let doDownload = true
-      if (missingOnly) {
-        const hasBanner = await hasLocalBanner(recordId)
-        const hasPreviews = await hasLocalPreviews(recordId)
-        doDownload = !hasBanner || !hasPreviews
-      }
-      if (doDownload) {
-        const additionalAssets = (await getAllDownloadableAssetUrlsForRecord(recordId, { downloadVideos: false, sourceOrder }))
-          .filter((asset) => asset.targetKind !== 'preview' && asset.url !== bannerUrl)
-        await downloadImages(
-          recordId,
-          atlasId || steamId || gogId || recordId,
-          (current, totalImages) => { if (onProgress) onProgress(current, totalImages) },
-          Boolean(bannerUrl),
-          screenUrls.length > 0,
-          'Unlimited',
-          false,
-          dataDir,
-          async () => bannerUrl,
-          async () => screenUrls,
-          updateBanners,
-          updatePreviews,
-          {
-            source: inferMediaSource(bannerUrl),
-            additionalAssets,
-            upsertMediaAsset,
-            getMediaSourceCache,
-            upsertMediaSourceCache,
-            blockedSources,
-            onRateLimited,
-          },
-        )
-      }
+      // downloadImages checks deterministic files one by one. Calling it even
+      // when some files exist lets "missing" repair a partially downloaded set.
+      const additionalAssets = (await getAllDownloadableAssetUrlsForRecord(recordId, { downloadVideos: false, sourceOrder }))
+        .filter((asset) => asset.targetKind !== 'preview' && asset.url !== bannerUrl)
+      downloadResult = await downloadImages(
+        recordId,
+        atlasId || steamId || gogId || recordId,
+        (current, totalImages) => { if (onProgress) onProgress(current, totalImages) },
+        Boolean(bannerUrl),
+        screenUrls.length > 0,
+        'Unlimited',
+        false,
+        dataDir,
+        async () => bannerUrl,
+        async () => screenUrls,
+        updateBanners,
+        updatePreviews,
+        {
+          source: inferMediaSource(bannerUrl),
+          additionalAssets,
+          upsertMediaAsset,
+          getMediaSourceCache,
+          upsertMediaSourceCache,
+          blockedSources,
+          onRateLimited,
+        },
+      )
     }
 
     // Remove duplicate DOWNLOADED preview files (same image saved under
@@ -610,7 +602,12 @@ module.exports = function registerMediaHandlers(ctx) {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('game-updated', recordId)
     })
-    return { success: true, previewUrls }
+    return {
+      success: true,
+      previewUrls,
+      failed: downloadResult?.failed || 0,
+      errors: downloadResult?.errors || [],
+    }
   }
 
   // Small promise helpers scoped to this handler set.
@@ -668,40 +665,6 @@ module.exports = function registerMediaHandlers(ctx) {
     })
   })
 
-  const hasLocalBanner = async (recordId) => {
-    // Check both tables: media_assets stores banner metadata (f95_banner,
-    // lewdcorner_banner, atlas_banner, atlas_banner_wide), while banners stores
-    // downloaded banner files. The missingOnly refresh needs both to correctly
-    // skip already-downloaded records.
-    //
-    // TODO: media_assets stores banner-like asset types beyond what LIKE '%banner%'
-    // matches. Currently only f95_banner, lewdcorner_banner, atlas_banner, and
-    // atlas_banner_wide are matched. Others that getBanner or similar UI paths
-    // could treat as banners: steam_header, steam_hero, atlas_cover,
-    // atlas_wallpaper. Consider whether hasLocalBanner should cover them too.
-    const fromAssets = await dbGetSafe(
-      `SELECT 1 FROM media_assets WHERE record_id = ? AND asset_type LIKE '%banner%' LIMIT 1`, [recordId])
-    const fromBanners = await dbGetSafe(
-      `SELECT 1 FROM banners WHERE record_id = ? LIMIT 1`, [recordId])
-    return !!(fromAssets || fromBanners)
-  }
-
-  const hasLocalPreviews = async (recordId) => {
-    // Both tables have to be consulted. Downloaded previews land in `previews`,
-    // but source-supplied ones (steam screenshots, atlas previews) are written
-    // to media_assets by imageUtils with an asset_type containing "preview" --
-    // which is why deletePreviews already deletes from BOTH. Checking only one
-    // is what made missingOnly re-download images that were already on disk.
-    const fromAssets = await dbGetSafe(
-      `SELECT 1 FROM media_assets WHERE record_id = ? AND asset_type LIKE '%preview%' LIMIT 1`, [recordId])
-    // Custom previews (is_custom=1) do not count: they are user-added and say
-    // nothing about whether the remote source has been fetched, so treating
-    // them as "present" would suppress a refresh that is genuinely needed.
-    const fromPreviews = await dbGetSafe(
-      `SELECT 1 FROM previews WHERE record_id = ? AND is_custom = 0 LIMIT 1`, [recordId])
-    return !!(fromAssets || fromPreviews)
-  }
-
   // Whether the user's saved setting wants images downloaded to disk.
   const shouldDownloadImages = () => getMediaStorageMode() === 'download'
 
@@ -724,7 +687,12 @@ module.exports = function registerMediaHandlers(ctx) {
           }
         },
       })
-      return { success: result.success, previewUrls: result.previewUrls }
+      return {
+        success: result.success,
+        previewUrls: result.previewUrls,
+        failed: result.failed,
+        errors: result.errors,
+      }
     } catch (err) {
       console.error('refresh-game-media error:', err)
       return { success: false, error: err.message }
@@ -744,6 +712,8 @@ module.exports = function registerMediaHandlers(ctx) {
       const download = shouldDownloadImages()
       const total = recordIds.length
       let processed = 0
+      let failed = 0
+      let failedGames = 0
       const emit = (text) => {
         if (!event.sender.isDestroyed()) {
           event.sender.send('refresh-media-progress', { text, processed, total })
@@ -760,17 +730,20 @@ module.exports = function registerMediaHandlers(ctx) {
       }
       for (const recordId of recordIds) {
         try {
-          await refreshOneGame(recordId, { mode, download, blockedSources, onRateLimited })
+          const result = await refreshOneGame(recordId, { mode, download, blockedSources, onRateLimited })
+          failed += result.failed || 0
+          if (result.failed > 0) failedGames++
         } catch (e) {
           console.warn(`refresh-media-library: game ${recordId} failed:`, e.message)
+          failedGames++
         }
         processed++
         if (processed % 3 === 0 || processed === total) {
           emit(`Refreshed ${processed}/${total} games…`)
         }
       }
-      emit(`Media refresh complete (${processed}/${total}).`)
-      return { success: true, processed, total }
+      emit(`Media refresh complete (${processed}/${total}); ${failed} image(s) failed.`)
+      return { success: true, processed, total, failed, failedGames }
     } catch (err) {
       console.error('refresh-media-library error:', err)
       return { success: false, error: err.message }

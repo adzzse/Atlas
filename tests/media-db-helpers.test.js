@@ -141,67 +141,6 @@ describe('deletePreviews hard-delete', () => {
   })
 })
 
-describe('hasLocalPreviews regression', () => {
-  it('detects previews stored in the previews table, not just media_assets', async () => {
-    await openFreshDatabase()
-    await updatePreviews(1, 'data/images/1/downloaded_preview.webp')
-
-    const fromAssets = await getDbGet(
-      `SELECT 1 FROM media_assets WHERE record_id = ? AND asset_type LIKE '%preview%' LIMIT 1`,
-      [1]
-    )
-    // Mirrors hasLocalPreviews: downloaded (is_custom = 0) rows count, custom do not.
-    const fromPreviews = await getDbGet(
-      `SELECT 1 FROM previews WHERE record_id = ? AND is_custom = 0 LIMIT 1`,
-      [1]
-    )
-
-    expect(fromAssets).toBeNull()
-    expect(fromPreviews).not.toBeNull()
-    expect(!!(fromAssets || fromPreviews)).toBe(true)
-  })
-
-  it('ignores custom-only previews (is_custom = 1) so missingOnly refresh still runs', async () => {
-    await openFreshDatabase()
-    // A purely custom preview must NOT satisfy hasLocalPreviews, which is what
-    // gates the missingOnly media refresh from re-downloading over a manual image.
-    await updatePreviews(1, 'data/images/1/custom_preview.webp', null, true)
-
-    const fromAssets = await getDbGet(
-      `SELECT 1 FROM media_assets WHERE record_id = ? AND asset_type LIKE '%preview%' LIMIT 1`,
-      [1]
-    )
-    const fromPreviews = await getDbGet(
-      `SELECT 1 FROM previews WHERE record_id = ? AND is_custom = 0 LIMIT 1`,
-      [1]
-    )
-
-    expect(fromAssets).toBeNull()
-    expect(fromPreviews).toBeNull()
-    expect(!!(fromAssets || fromPreviews)).toBe(false)
-  })
-})
-
-describe('hasLocalBanner regression', () => {
-  it('detects banners stored in the banners table, not just media_assets', async () => {
-    await openFreshDatabase()
-    await updateBanners(1, 'data/images/1/downloaded_banner.webp', 'f95')
-
-    const fromAssets = await getDbGet(
-      `SELECT 1 FROM media_assets WHERE record_id = ? AND asset_type LIKE '%banner%' LIMIT 1`,
-      [1]
-    )
-    const fromBanners = await getDbGet(
-      `SELECT 1 FROM banners WHERE record_id = ? LIMIT 1`,
-      [1]
-    )
-
-    expect(fromAssets).toBeNull()
-    expect(fromBanners).not.toBeNull()
-    expect(!!(fromAssets || fromBanners)).toBe(true)
-  })
-})
-
 describe('deleteBanner', () => {
   it('deletes banner files from disk and clears both banners and media_assets tables', async () => {
     const { dataDir } = await openFreshDatabase()

@@ -1167,6 +1167,9 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       const result = await window.electronAPI.refreshGameMedia(game.record_id, { mode })
       if (result?.success === false) throw new Error(result.error || 'Refresh failed')
       if (Array.isArray(result?.previewUrls)) setPreviews(filterOutBanner(result.previewUrls, game.banner_url))
+      if (result?.failed > 0) {
+        alert(`Media refresh completed with ${result.failed} failed image(s). Atlas skipped them and kept the successful files.\n\n${result.errors?.[0] || ''}`)
+      }
       onRefresh?.(game.record_id)
       setRefreshModalOpen(false)
     } catch (error) {
