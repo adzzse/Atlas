@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { releaseUrlFor } from '../src/utils/releaseUrl.js'
 
 describe('releaseUrlFor', () => {
+  it('opens the personal release notes for a fork build', () => {
+    expect(releaseUrlFor('0.9.9-fork.1')).toBe(
+      'https://github.com/adzzse/Atlas/releases/tag/v0.9.9-fork.1'
+    )
+  })
+
   it('points at the tagged release for the given version', () => {
     expect(releaseUrlFor('0.9.9')).toBe(
       'https://github.com/towerwatchman/Atlas/releases/tag/v0.9.9'

@@ -98,6 +98,8 @@ const buildDefaultConfig = (dataDir = '') => ({
   Updates: {
     stableVersion: '',
     nightlyVersion: '',
+    forkVersion: '',
+    upstreamNightlyTag: '',
   },
   Library: {
     rootPath: dataDir,

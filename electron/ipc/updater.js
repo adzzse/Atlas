@@ -1,7 +1,7 @@
 'use strict'
 
 const path = require('path')
-const { BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain } = require('electron')
 const { normalizeUpdateError } = require('../utils/updateErrors')
 
 const UPDATE_NOT_DOWNLOADED_MESSAGE =
@@ -45,6 +45,22 @@ module.exports = function registerUpdaterHandlers(ctx) {
     return {
       ...ctx.lastUpdateStatus,
       branch: ctx.getConfiguredAppUpdateBranch?.(),
+      build: {
+        version: app.getVersion(),
+        branch: ctx.getDefaultAppUpdateBranch?.(),
+        source: process.defaultApp ? 'local development' : (require('../../package.json').atlasBuildSource || 'upstream'),
+      },
+      upstreamNightly: ctx.upstreamNightlyNotice,
+    }
+  })
+
+  // A receipt is accepted only for the notice actually offered by main; the
+  // renderer cannot suppress an arbitrary future release by writing a tag.
+  ipcMain.handle('acknowledge-upstream-nightly', async (event, tag) => {
+    try {
+      return { success: ctx.acknowledgeUpstreamNightly(tag) }
+    } catch (err) {
+      return { success: false, error: err.message }
     }
   })
 

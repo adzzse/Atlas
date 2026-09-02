@@ -59,6 +59,7 @@ const cp = require('child_process')
 
 const { isNewerVersion } = require('./utils/versionUtils')
 const { normalizeUpdateError } = require('./utils/updateErrors')
+const { fetchNightlyNotice } = require('./utils/upstreamNightly')
 const { ensureSevenZipConfigured } = require('./utils/sevenZipDetect')
 const {
   addVersion, upsertVersion, updateVersion,
@@ -191,6 +192,9 @@ let updateDownloaded = false
 let lastUpdateStatus = { status: 'idle' }
 let installAfterDownload = false
 let activeAppUpdateBranch = null
+let upstreamNightlyNotice = null
+let upstreamNightlyCheck = null
+let appUpdateTimer = null
 
 // Data always lives beside the executable. There is no AppData fallback: the old
 // behaviour silently relocated to %APPDATA%\Atlas whenever the write probe
@@ -520,17 +524,19 @@ function sendUpdateStatus(status, source = 'unknown') {
 }
 
 function normalizeAppUpdateBranch(value) {
-  if (value === 'stable' || value === 'nightly') return value
+  if (value === 'stable' || value === 'nightly' || value === 'fork') return value
   return null
 }
 
 function getDefaultAppUpdateBranch() {
+  if (app.getVersion().includes('-fork.')) return 'fork'
   return app.getVersion().includes('-nightly') ? 'nightly' : 'stable'
 }
 
 // The config key under [Updates] that stores the last-installed version for
 // a given branch.
 function versionKeyForBranch(branch) {
+  if (branch === 'fork') return 'forkVersion'
   return branch === 'nightly' ? 'nightlyVersion' : 'stableVersion'
 }
 
@@ -576,6 +582,11 @@ function configureAppUpdateBranch(branch, { resetStatus = false } = {}) {
   const normalizedBranch = normalizeAppUpdateBranch(branch) || getDefaultAppUpdateBranch()
   const previousBranch = activeAppUpdateBranch
   const branchChanged = Boolean(previousBranch && previousBranch !== normalizedBranch)
+  // A pending installer belongs to its original feed. Do not relabel it as a
+  // different channel or let an in-flight check overwrite the new feed's state.
+  if (branchChanged && (installAfterDownload || ['checking', 'downloading', 'downloaded', 'installing'].includes(lastUpdateStatus?.status))) {
+    throw new Error('Finish the current update or restart Atlas before changing the update branch.')
+  }
   activeAppUpdateBranch = normalizedBranch
   // The feed channel decides WHICH manifest electron-updater fetches from the
   // GitHub release: stable builds publish `latest.yml`, while nightly builds
@@ -603,16 +614,16 @@ function configureAppUpdateBranch(branch, { resetStatus = false } = {}) {
   //     last-installed version. For nightly we ensure the baseline carries a
   //     `-nightly` prerelease component so the feed matcher has a channel word
   //     to lock onto even before setting `.channel` takes effect.
-  const isNightly = normalizedBranch === 'nightly'
-  autoUpdater.allowPrerelease = isNightly
+  const channel = normalizedBranch === 'stable' ? 'latest' : normalizedBranch
+  autoUpdater.allowPrerelease = normalizedBranch !== 'stable'
   // Assigning `.channel` also flips allowDowngrade to true internally, so set
   // allowDowngrade explicitly afterwards.
-  autoUpdater.channel = isNightly ? 'nightly' : 'latest'
+  autoUpdater.channel = channel
   autoUpdater.setFeedURL({
     provider: 'github',
-    owner: 'towerwatchman',
+    owner: normalizedBranch === 'fork' ? 'adzzse' : 'towerwatchman',
     repo: 'Atlas',
-    channel: isNightly ? 'nightly' : 'latest',
+    channel,
   })
 
   // electron-updater resolves & caches the provider lazily; setFeedURL already
@@ -696,6 +707,9 @@ function configureAppUpdateBranch(branch, { resetStatus = false } = {}) {
 
 configureAppUpdateBranch(getDefaultAppUpdateBranch())
 autoUpdater.autoDownload = false
+// Closing a custom build must not silently install a previously downloaded
+// official binary. Installation always goes through the explicit IPC action.
+autoUpdater.autoInstallOnAppQuit = false
 
 // ── Updater diagnostics ─────────────────────────────────────────────────────
 // electron-updater's console output only appears in the main-process log, which
@@ -810,6 +824,60 @@ autoUpdater.on('error', (err) => {
     retryable: normalizedError.retryable,
   }, normalizedError.code === 'UPDATE_PACKAGE_NOT_READY' ? 'package-not-ready' : 'error')
 })
+
+// Keep the notice until the renderer actually shows it, including when a check
+// finishes before the main window mounts. Receipt storage survives restarts.
+function acknowledgeUpstreamNightly(tag) {
+  if (typeof tag !== 'string' || tag !== upstreamNightlyNotice?.tag) return false
+  const nextConfig = {
+    ...appConfig,
+    Updates: { ...appConfig.Updates, upstreamNightlyTag: tag },
+  }
+  fs.writeFileSync(configPath, ini.stringify(nextConfig))
+  appConfig = nextConfig
+  upstreamNightlyNotice = null
+  return true
+}
+
+// Watching upstream is independent of the installed binary's update source.
+// Never call setFeedURL here: that would invalidate a Fork download in progress.
+function checkUpstreamNightlyUpdates() {
+  if (upstreamNightlyCheck) return upstreamNightlyCheck
+  upstreamNightlyCheck = fetchNightlyNotice(appConfig?.Updates?.upstreamNightlyTag)
+    .then((notice) => {
+      if (!notice || isQuitting || notice.tag === upstreamNightlyNotice?.tag) return
+      upstreamNightlyNotice = notice
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('upstream-nightly-available', notice)
+      })
+      updaterLog('UPSTREAM-NIGHTLY', notice.tag)
+    })
+    .catch((err) => updaterLog('UPSTREAM-NIGHTLY-CHECK-FAILED', err.message))
+    .finally(() => { upstreamNightlyCheck = null })
+  return upstreamNightlyCheck
+}
+
+// Background checks share startup error handling and never interrupt an offer,
+// download or installer the user is already acting on.
+function checkAppUpdatesInBackground() {
+  if (!['idle', 'not-available', 'error'].includes(lastUpdateStatus?.status)) return
+  autoUpdater.checkForUpdates().catch((err) => {
+    const normalizedError = normalizeUpdateError(err)
+    console.warn('Background update check failed:', normalizedError.technicalMessage)
+    // Preserve the upstream startup behavior: an empty channel is not a
+    // failure worth interrupting the user about during an unsolicited check.
+    if (normalizedError.code === 'UPDATE_NO_RELEASE_ON_CHANNEL') {
+      sendUpdateStatus({ status: 'not-available' }, 'background-no-release-on-channel')
+      return
+    }
+    sendUpdateStatus({
+      status: 'error',
+      error: normalizedError.userMessage,
+      code: normalizedError.code,
+      retryable: normalizedError.retryable,
+    }, 'background-check')
+  })
+}
 
 // ── Shared helper functions ─────────────────────────────────────────────────
 
@@ -1795,7 +1863,9 @@ function buildCtx() {
     activeImportSession, activeScanSession, activeLibraryValidation, isQuitting,
     // updater state
     autoUpdater, lastUpdateStatus, updateInfo, updateDownloaded, installAfterDownload,
-    getConfiguredAppUpdateBranch, configureAppUpdateBranch,
+    getConfiguredAppUpdateBranch, configureAppUpdateBranch, getDefaultAppUpdateBranch,
+    get upstreamNightlyNotice() { return upstreamNightlyNotice },
+    acknowledgeUpstreamNightly,
     // path helpers
     getAssetBasePath, getMediaStorageMode, firstMediaPath,
     getMetadataSourceOrder,
@@ -2429,30 +2499,20 @@ app.whenReady().then(async () => {
   }
 
   if (appConfig?.Interface?.checkForAppUpdatesOnStartup) {
-    autoUpdater.checkForUpdates().catch((err) => {
-      const normalizedError = normalizeUpdateError(err)
-      console.warn('Startup update check failed:', normalizedError.technicalMessage)
-      // The startup check is a background, unsolicited action. Only surface
-      // outcomes the user can actually act on. A benign "no release on this
-      // channel yet" (nothing published for this branch) is not an error and
-      // must not pop a failure notice on every launch — stay silent and let
-      // the footer remain idle. Real, actionable failures (network, package
-      // not ready, genuine check failure) still surface.
-      if (normalizedError.code === 'UPDATE_NO_RELEASE_ON_CHANNEL') {
-        sendUpdateStatus({ status: 'not-available' }, 'startup-no-release-on-channel')
-        return
-      }
-      sendUpdateStatus({
-        status: 'error',
-        error: normalizedError.userMessage,
-        code: normalizedError.code,
-        retryable: normalizedError.retryable,
-      })
-    })
+    checkAppUpdatesInBackground()
+  }
+  if (!process.defaultApp) {
+    checkUpstreamNightlyUpdates()
+    appUpdateTimer = setInterval(() => {
+      checkUpstreamNightlyUpdates()
+      if (getConfiguredAppUpdateBranch() === 'fork') checkAppUpdatesInBackground()
+    }, 30 * 60 * 1000)
+    appUpdateTimer.unref()
   }
 })
 
 app.on('before-quit', () => {
+  clearInterval(appUpdateTimer)
   stopExtensionServer()
   isQuitting = true
 })

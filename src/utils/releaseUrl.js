@@ -15,5 +15,7 @@ import { LINKS } from './links.js'
  */
 export function releaseUrlFor(version) {
   const tag = String(version ?? '').trim().replace(/^v+/i, '')
-  return `${LINKS.github}/releases/tag/v${tag}`
+  // Build identity, not the currently selected feed, owns the release notes.
+  const repo = tag.includes('-fork.') ? 'https://github.com/adzzse/Atlas' : LINKS.github
+  return `${repo}/releases/tag/v${tag}`
 }

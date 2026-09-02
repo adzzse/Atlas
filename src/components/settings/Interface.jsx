@@ -19,6 +19,7 @@ const Interface = () => {
   const [updatePercent, setUpdatePercent] = useState(0);
   const [updateError, setUpdateError] = useState("");
   const [appUpdateBranch, setAppUpdateBranch] = useState("stable");
+  const [runningBuild, setRunningBuild] = useState(null);
   // NSFW / adult-content ("Browse mode") opt-in — mirrors the same setting
   // surfaced by the first-run prompt in App.jsx. See
   // electron/ipc/settings.js's get-nsfw-status / set-nsfw-enabled.
@@ -38,9 +39,10 @@ const Interface = () => {
     if (typeof status.percent === "number") {
       setUpdatePercent(status.percent);
     }
-    if (status.branch === "stable" || status.branch === "nightly") {
+    if (["stable", "nightly", "fork"].includes(status.branch)) {
       setAppUpdateBranch(status.branch);
     }
+    if (status.build) setRunningBuild(status.build);
     if (status.error) setUpdateError(sanitizePercentText(status.error));
     else if (status.status !== "error") setUpdateError("");
   };
@@ -55,7 +57,7 @@ const Interface = () => {
       setCheckForAppUpdatesOnStartup(
         interfaceSettings.checkForAppUpdatesOnStartup ?? true,
       );
-      if (interfaceSettings.appUpdateBranch === "stable" || interfaceSettings.appUpdateBranch === "nightly") {
+      if (["stable", "nightly", "fork"].includes(interfaceSettings.appUpdateBranch)) {
         setAppUpdateBranch(interfaceSettings.appUpdateBranch);
       }
       setSearchFields(normalizeSearchFieldIds(config.Search?.defaultFields));
@@ -141,14 +143,28 @@ const Interface = () => {
     saveSettings({ checkForAppUpdatesOnStartup: newVal });
   };
 
-  const handleAppUpdateBranchChange = (e) => {
-    const nextBranch = e.target.value === "nightly" ? "nightly" : "stable";
-    setAppUpdateBranch(nextBranch);
-    setUpdateStatus("idle");
-    setUpdateError("");
-    setUpdateVersion("");
-    setUpdatePercent(0);
-    saveSettings({ appUpdateBranch: nextBranch });
+  // Selecting an official binary is an explicit opt-out of personal features.
+  // Wait for persistence so a rejected/busy switch cannot mislabel the feed.
+  const handleAppUpdateBranchChange = async (e) => {
+    const nextBranch = e.target.value;
+    if (!["stable", "nightly", "fork"].includes(nextBranch)) return;
+    if (runningBuild?.branch === "fork" && nextBranch !== "fork" && !window.confirm(
+      "Installing an official Stable or Nightly build will replace this Fork build and remove its personal features, including the Fork updater. Your library data stays in place. Continue?",
+    )) return;
+    try {
+      const result = await window.electronAPI.saveSettings({ Interface: { appUpdateBranch: nextBranch } });
+      if (!result?.success) throw new Error(result?.error || "Unable to change update branch");
+      setAppUpdateBranch(nextBranch);
+      setUpdateStatus("idle");
+      setUpdateError("");
+      setUpdateVersion("");
+      setUpdatePercent(0);
+    } catch (err) {
+      setUpdateError(err.message);
+      const state = await window.electronAPI.getAppUpdateState?.();
+      if (state) applyUpdateStatus(state);
+      setUpdateError(err.message);
+    }
   };
 
   // NSFW lives in its own [NSFW] config section (not [Interface]), so this
@@ -337,7 +353,12 @@ const Interface = () => {
 
       <div className="mb-2">
         <div className="font-semibold mb-2">App Updates</div>
+        {runningBuild && <p className="text-xs opacity-70 mb-2">
+          Running build: {runningBuild.branch} / {runningBuild.version} ({runningBuild.source})
+        </p>}
         <p className="text-xs opacity-70 mb-3">{updateStatusText}</p>
+        {updateError && !["error", "package_not_ready"].includes(updateStatus) &&
+          <p role="alert" className="text-xs text-warning mb-3">{updateError}</p>}
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm" htmlFor="app-update-branch">Branch</label>
           <select
@@ -345,8 +366,9 @@ const Interface = () => {
             className="w-32 bg-secondary border border-border text-text rounded p-2"
             value={appUpdateBranch}
             onChange={handleAppUpdateBranchChange}
-            disabled={["checking", "downloading", "installing"].includes(updateStatus)}
+            disabled={["checking", "downloading", "downloaded", "installing"].includes(updateStatus)}
           >
+            <option value="fork">Fork</option>
             <option value="stable">Stable</option>
             <option value="nightly">Nightly</option>
           </select>
@@ -372,9 +394,12 @@ const Interface = () => {
           </button>
         </div>
         <p className="text-xs opacity-50 mt-2">
-          Stable checks normal releases from main. Nightly includes prereleases.
-          Switching to Stable will not install an older version.
+          Fork updates from adzzse/Atlas. Stable and Nightly update from towerwatchman/Atlas.
+          Fork checks every 30 minutes while Atlas runs; downloads and installs need your confirmation.
+          Upstream Nightly notifications are always checked separately and never change your branch.
         </p>
+        {appUpdateBranch !== "fork" && runningBuild?.branch === "fork" &&
+          <p className="text-xs text-warning mt-2">Installing this official channel replaces the personal Fork build. Reinstall your Fork installer to return.</p>}
       </div>
       <div className="border-t border-text opacity-25 my-2"></div>
     </div>

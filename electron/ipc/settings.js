@@ -224,14 +224,24 @@ module.exports = function registerSettingsHandlers(ctx) {
       const current = ctx.appConfig || {}
       const nextSettings = { ...current }
       for (const section of Object.keys(incoming)) {
+        // Updater baselines and notification receipts are main-process state;
+        // a stale full-config payload must not roll them back.
+        if (section === 'Updates') continue
         const value = incoming[section]
         nextSettings[section] =
           value && typeof value === 'object' && !Array.isArray(value)
             ? { ...(current[section] || {}), ...value }
             : value
       }
-      ctx.appConfig = nextSettings
+      const previousUpdateBranch = ctx.getConfiguredAppUpdateBranch?.({ Interface: previousInterface })
+      const nextUpdateBranch = ctx.getConfiguredAppUpdateBranch?.(nextSettings)
+      // Validate before the config write, not after a failed channel switch.
+      if (previousUpdateBranch !== nextUpdateBranch &&
+          (ctx.installAfterDownload || ['checking', 'downloading', 'downloaded', 'installing'].includes(ctx.lastUpdateStatus?.status))) {
+        throw new Error('Finish the current update or restart Atlas before changing the update branch.')
+      }
       fs.writeFileSync(ctx.configPath, ini.stringify(nextSettings))
+      ctx.appConfig = nextSettings
 
       // Theme changes need to apply live across every open window (main
       // library, settings, importer, game details) since each is its own
@@ -266,8 +276,6 @@ module.exports = function registerSettingsHandlers(ctx) {
         })
       }
 
-      const previousUpdateBranch = ctx.getConfiguredAppUpdateBranch?.({ Interface: previousInterface })
-      const nextUpdateBranch = ctx.getConfiguredAppUpdateBranch?.(nextSettings)
       if (previousUpdateBranch !== nextUpdateBranch) {
         ctx.configureAppUpdateBranch?.(nextUpdateBranch, { resetStatus: true })
       }
