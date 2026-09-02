@@ -285,8 +285,9 @@ function registerGamesHandlers(ctx) {
   // to a game (or array of games) right before it leaves for the renderer.
   const withMedia = (data) => {
     const sourceOrder = getMetadataSourceOrder()
-    if (Array.isArray(data)) return data.map((g) => applyMediaSources(g, { sourceOrder }))
-    return applyMediaSources(data, { sourceOrder })
+    const mediaStorageMode = getMediaStorageMode()
+    if (Array.isArray(data)) return data.map((g) => applyMediaSources(g, { sourceOrder, mediaStorageMode }))
+    return applyMediaSources(data, { sourceOrder, mediaStorageMode })
   }
 
   ipcMain.handle('add-game', async (event, game) => {

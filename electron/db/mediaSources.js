@@ -165,8 +165,8 @@ const steamHeroCandidates = (game, appid) => [
 ]
 
 // Mutates `game` in place, attaching resolved media fields. Safe to call on any
-// game row; it only pins custom/user banners. Downloaded source banners still
-// participate in source ordering so Steam can beat a cached F95 banner.
+// game row; custom/user banners stay pinned, while downloaded source banners
+// lead only when the user has selected local media storage.
 //
 // Produces ordered *candidate* lists so the renderer can fall back image-by-image:
 //   game.banner_candidates / hero_candidates / logo_candidates
@@ -185,17 +185,22 @@ const applyMediaSources = (game, options = {}) => {
   game.gog_id = game.gog_id || gogId
 
   // Banner: custom/user banners must win, but downloaded source banners still
-  // follow metadata source order. Otherwise a cached F95 banner masks a higher
-  // priority Steam header in the gallery grid.
+  // follow metadata source order in stream mode. In download mode the local
+  // file leads and the ordered web candidates remain available as fallbacks.
   const bannerSource = game.banner_source
   const isCustomBanner = /banner_custom_/i.test(String(game.banner_url || ''))
-  const isPinnedBanner = isCustomBanner && (bannerSource === 'download' || bannerSource === 'download-animated')
+  const isDownloadedBanner = bannerSource === 'download' || bannerSource === 'download-animated'
+  const isPinnedBanner = isCustomBanner && isDownloadedBanner
+  const preferDownloadedBanner = isDownloadedBanner && options.mediaStorageMode === 'download'
   let bannerCandidates
   if (!isPinnedBanner) {
     bannerCandidates = bannerCandidatesForOrder(game, order, appid)
-    // Keep the SQL-resolved url as a final fallback (covers source banners or
-    // local files not represented in the per-source candidate set).
-    if (game.banner_url) bannerCandidates.push(game.banner_url)
+    // Keep the SQL-resolved url in the chain (covers source banners or local
+    // files not represented in the per-source candidate set).
+    if (game.banner_url) {
+      if (preferDownloadedBanner) bannerCandidates.unshift(game.banner_url)
+      else bannerCandidates.push(game.banner_url)
+    }
   } else {
     bannerCandidates = game.banner_url ? [game.banner_url] : []
   }
