@@ -95,6 +95,14 @@ Sổ theo dõi tùy biến của `adzzse/Atlas`, lập ngày **03/09/2026**. Dù
 - Mã: `electron/imageUtils.js`, `electron/ipc/media.js`, `src/App.jsx`, `src/components/detail/GameDetailPage.jsx`, `src/components/detail/GameDetailsWindow.jsx`, `src/components/detail/window/MediaTab.jsx`.
 - Kiểm chứng: `tests/media-download-resilience.test.js`, `tests/media-db-helpers.test.js`, `npm run check` và commit `cdf30140a4cb266de2116cd46191d811b12424da`.
 
+### F10 — Download từ Wishlist tự lưu media local
+
+- Khi một download từ Wishlist/Browse được cài thành công và lần đầu promote thành record trong Library, Atlas tự chạy `missing` media refresh ở nền nếu `Metadata.mediaStorageMode=download`.
+- Luồng này không phụ thuộc hai tùy chọn ảnh riêng của Importer vì Download Manager không đi qua `import-games`. Chế độ `stream` vẫn không ghi ảnh local.
+- Lỗi CDN/media chỉ được ghi nhận và không biến một game đã cài thành công thành cài đặt thất bại. Downloader dùng lại toàn bộ cơ chế chịu lỗi của F09, không có bản tải ảnh thứ hai.
+- Mã: `electron/ipc/importer.js`, `electron/ipc/media.js`.
+- Kiểm chứng: `tests/wishlist-download-media.test.js`, `tests/media-download-resilience.test.js` và `npm run check`.
+
 ## 3. Checklist khi Nightly có bản mới
 
 Thông báo Nightly ≠ merge source ≠ phát hành Fork ≠ cài binary. Hiện **không có auto-merge upstream vào Fork**; CI chỉ build mã đã được đưa lên branch `fork`.
@@ -111,7 +119,7 @@ git fetch upstream nightly
 git merge --no-commit --no-ff upstream/nightly
 ```
 
-4. Đọc diff và giải quyết conflict theo F01–F09; không chọn toàn bộ “theirs”/“ours”. Không dùng `reset --hard`, force-push hoặc thay toàn bộ branch bằng Nightly để đồng bộ. Dòng GitHub so sánh với `main` không phải lý do để merge `main`.
+4. Đọc diff và giải quyết conflict theo F01–F10; không chọn toàn bộ “theirs”/“ours”. Không dùng `reset --hard`, force-push hoặc thay toàn bộ branch bằng Nightly để đồng bộ. Dòng GitHub so sánh với `main` không phải lý do để merge `main`.
 5. Chạy test và build kiểm tra:
 
 ```powershell
@@ -137,6 +145,7 @@ Note là checklist, không tự bảo vệ code khỏi conflict. Mỗi tính nă
 - **PASS — nguồn catalog:** API gốc trả HTTP 200; mã đồng bộ catalog trong bản cài khớp source không bị chỉnh sửa.
 - **PASS — phát hành CI:** [run 33661510233](https://github.com/adzzse/Atlas/actions/runs/33661510233) thành công; release `.2` có đủ installer, blockmap và `fork.yml`, đã publish prerelease. Chưa kiểm chứng cài `.2` trong mốc này.
 - **PASS — media refresh chịu lỗi:** test đỏ đã tái hiện request GIF bị gọi hai lần, `Missing only` bỏ qua bộ preview tải dở và renderer preload toàn bộ URL. Sau fix, mỗi URL lỗi chỉ gọi một lần với deadline 30 giây, ảnh sau vẫn tải, tiến độ đạt cuối và số lỗi được trả về. Full check: 127 test files, 1.388 passed, 7 skipped; renderer build đạt.
+- **PARTIAL — Wishlist tự tải media:** regression test đã chạy đỏ trước fix rồi xanh; `npm run check` PASS với 129 test files, 1.395 passed, 7 skipped và installer local `.4` chứa đúng hook tự tải. Chưa smoke test cài đặt/download thật ở thời điểm ghi dòng này.
 - Ghi nhận updater `.1`: tải differential gặp SHA512 mismatch rồi tự fallback tải đầy đủ thành công. Không kết luận differential đã hoạt động; kết quả cài cuối cùng đã được xác nhận. Log: `D:\Tools\Atlas\data\chrome\atlas-updater.log`.
 - `npm ci` báo 5 dependency advisories có sẵn (1 moderate, 4 high); chưa xử lý trong phạm vi tùy biến Fork này. Cần đánh giá riêng khi nâng dependency.
 

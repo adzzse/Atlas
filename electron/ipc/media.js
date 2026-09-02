@@ -665,6 +665,11 @@ module.exports = function registerMediaHandlers(ctx) {
     })
   })
 
+  // Download installation lives in importer.js, but promoted Wishlist/Browse
+  // records need the same missing-media repair rather than a second downloader.
+  // Read through ctx at call time so tests and future registration order remain safe.
+  ctx.refreshGameMedia = refreshOneGame
+
   // Whether the user's saved setting wants images downloaded to disk.
   const shouldDownloadImages = () => getMediaStorageMode() === 'download'
 

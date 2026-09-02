@@ -76,6 +76,23 @@ let nextScanId = 1
 let handlerCtx = null;
 const getLiveConfig = () => handlerCtx?.appConfig || {};
 
+// Wishlist/Browse downloads bypass the Importer image phase entirely. Keep
+// their post-install media refresh non-fatal: downloaded game files are usable
+// even when a remote image host is unavailable.
+async function autoDownloadPromotedMedia({ promotion, recordId, storageMode, refreshGameMedia }) {
+  if (!promotion || storageMode !== "download" || typeof refreshGameMedia !== "function") return null;
+  try {
+    const result = await refreshGameMedia(recordId, { mode: "missing", download: true });
+    if (result?.failed > 0) {
+      console.warn(`[downloads-install] media refresh left ${result.failed} failed image(s) for record ${recordId}`);
+    }
+    return result;
+  } catch (err) {
+    console.warn(`[downloads-install] media refresh failed for record ${recordId}:`, err?.message || err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
 // Closes the import wizard if it's open. `ctx.importerWindow` is a live getter
 // in main.js, so this always sees the current window (or null).
 const closeImporterWindow = () => {
@@ -5016,6 +5033,16 @@ ipcMain.handle("downloads-install", async (event, { id, version, onComplete, kee
       }
     });
 
+    // Promotion is the point where a Wishlist/Browse item first has a local
+    // record to own image files. Run the shared repair path in the background
+    // so media hosts cannot delay or invalidate an otherwise successful install.
+    void autoDownloadPromotedMedia({
+      promotion,
+      recordId,
+      storageMode: getMediaStorageMode(),
+      refreshGameMedia: ctx.refreshGameMedia,
+    });
+
     notify("", 100);
     // A declined replace is reported back so the renderer can say so. The new
     // version IS installed either way, so this is a notice rather than an error
@@ -5077,6 +5104,7 @@ module.exports.__testables = {
   isRarArchivePath,
   getConfiguredExtractionExtensions,
   getConfiguredGameExtensions,
+  autoDownloadPromotedMedia,
   // Exposed so the save-preservation restore path can be exercised directly.
   // Callable without registerImporterHandlers(ctx): the helpers it needs
   // (normalizeForPathCompare, removeEmptyParentDirectories, isAllowedDeletionPath)
