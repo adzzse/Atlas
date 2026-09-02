@@ -1304,10 +1304,15 @@ export const builtInSavedFilters = [
   },
 ]
 
-// `filterOptions` carries lookups that can't live on the game rows themselves —
-// currently just collectionIdsByRecord (see filterGamesWithState).
+// `filterOptions` carries values that cannot live on the game rows themselves:
+// collectionIdsByRecord for filtering, plus the persisted initial sort.
 export function useFilters(games, includeUninstalledRef, fetchGames, setSelectedGame, filterOptions = {}) {
-  const [activeFilters, setActiveFilters] = useState(() => normalizeFilterState(defaultFilters))
+  // Initial sort may come from the persisted Library preference; every other
+  // filter still starts from the normal defaults.
+  const [activeFilters, setActiveFilters] = useState(() => normalizeFilterState({
+    ...defaultFilters,
+    ...(filterOptions?.initialFilters || {}),
+  }))
 
   const handleFilterChange = useCallback(
     (filters) => {

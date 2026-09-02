@@ -44,6 +44,12 @@ import { useBannerTemplate } from './theme/BannerTemplateProvider.jsx'
 import { getGameTitle, normalizeGameForRenderer } from './utils/gameDisplay.js'
 import { getWishlistIdentityKey, withWishlistStates } from './utils/wishlistIdentity.js'
 import { shouldRefetchCatalog } from './utils/wishlistRefresh.js'
+import {
+  getViewSortPreference,
+  loadViewSortPreferences,
+  saveViewSortPreferences,
+  updateViewSortPreference,
+} from './utils/viewSortPreferences.js'
 import { formatPercent, formatProgressNumber, sanitizePercentText } from './utils/formatPercent.js'
 import { BROWSE_MODE_ENABLED } from './features.js'
 
@@ -221,6 +227,10 @@ const App = () => {
   const lastFetchedCatalogParamsKeyRef = useRef(null)
   const pendingLibraryScrollTopRestoreRef = useRef(null)
   const dbUpdateRunningRef = useRef(false)
+  const viewSortPreferencesRef = useRef(null)
+  if (!viewSortPreferencesRef.current) {
+    viewSortPreferencesRef.current = loadViewSortPreferences()
+  }
   const showGameList = sidebarMode === SIDE_PANEL_MODES.GAMES
   const showSavedFilters = sidebarMode === SIDE_PANEL_MODES.SAVED_FILTERS
   const showLibrarySidebar = showGameList || showSavedFilters
@@ -341,7 +351,25 @@ const App = () => {
   const {
     activeFilters, handleFilterChange, handleResetFilters,
     filteredGames: localFilteredGames, installedGameCount, uninstalledGameCount,
-  } = useFilters(games, includeUninstalledRef, fetchGames, setSelectedGame, { collectionIdsByRecord })
+  } = useFilters(games, includeUninstalledRef, fetchGames, setSelectedGame, {
+    collectionIdsByRecord,
+    initialFilters: getViewSortPreference(viewSortPreferencesRef.current, 'local'),
+  })
+  const persistViewSort = useCallback((mode, filters) => {
+    const current = getViewSortPreference(viewSortPreferencesRef.current, mode)
+    const nextPreferences = updateViewSortPreference(viewSortPreferencesRef.current, mode, filters)
+    const next = getViewSortPreference(nextPreferences, mode)
+    if (!next || (current?.sort === next.sort && current?.sortDirection === next.sortDirection)) return
+    viewSortPreferencesRef.current = saveViewSortPreferences(nextPreferences)
+  }, [])
+  const applyViewSort = useCallback((mode, filters = {}) => {
+    const savedSort = getViewSortPreference(viewSortPreferencesRef.current, mode)
+    handleFilterChange(savedSort ? { ...filters, ...savedSort } : filters)
+  }, [handleFilterChange])
+  const handleViewFilterChange = useCallback((filters) => {
+    handleFilterChange(filters)
+    persistViewSort(libraryMode, filters)
+  }, [handleFilterChange, libraryMode, persistViewSort])
   const catalogWithWishlist = useMemo(
     () => withWishlistStates(catalogGames, wishlistIdentityKeys),
     [catalogGames, wishlistIdentityKeys],
@@ -652,8 +680,8 @@ const App = () => {
     setLibraryMode('local')
     setLibraryView('grid')
     // Inlined rather than calling clearCollectionFilter(), which is declared
-    // further down — handleFilterChange is already in scope here.
-    handleFilterChange({ collectionIds: [] })
+    // further down. Restore Library's own sort instead of inheriting Wishlist.
+    applyViewSort('local', activeSavedFilterId ? defaultFilters : { collectionIds: [] })
     if (sidebarMode === SIDE_PANEL_MODES.CATALOG || sidebarMode === SIDE_PANEL_MODES.WISHLIST) {
       setAndPersistSidePanelMode(SIDE_PANEL_MODES.HIDDEN)
     }
@@ -664,10 +692,9 @@ const App = () => {
     // the full library.
     if (activeSavedFilterId) {
       setActiveSavedFilterId('')
-      handleResetFilters()
     }
     goBackToLibrary()
-  }, [goBackToLibrary, setAndPersistSidePanelMode, sidebarMode, activeSavedFilterId, handleResetFilters, handleFilterChange])
+  }, [goBackToLibrary, setAndPersistSidePanelMode, sidebarMode, activeSavedFilterId, applyViewSort])
 
 
   // ── Collection handlers ────────────────────────────────────────────────────
@@ -715,12 +742,12 @@ const App = () => {
     setSelectedGame(null)
     setLibraryView('grid')
     setActiveSavedFilterId('')
-    handleFilterChange({
+    applyViewSort('local', {
       collectionIds: [String(collection.id)],
       includeUninstalled: true,
       installState: 'all',
     })
-  }, [handleFilterChange])
+  }, [applyViewSort])
 
   const clearCollectionFilter = useCallback(() => {
     handleFilterChange({ collectionIds: [] })
@@ -1079,6 +1106,7 @@ const App = () => {
       setLibraryMode('local')
       setSelectedGame(null)
       setAndPersistSidePanelMode(SIDE_PANEL_MODES.GAMES)
+      applyViewSort('local')
       return
     }
     const enteringFreshly = libraryMode !== 'catalog'
@@ -1131,6 +1159,7 @@ const App = () => {
     fetchCatalogGames,
     handleFilterChange,
     libraryMode,
+    applyViewSort,
     setAndPersistSidePanelMode,
     sidebarMode,
   ])
@@ -1154,9 +1183,10 @@ const App = () => {
     setSelectedGame(null)
     setAndPersistSidePanelMode(SIDE_PANEL_MODES.WISHLIST)
     setShowSearchSidebar(false)
+    applyViewSort('wishlist')
     Promise.all([fetchWishlistGames(), loadWishlistIdentities()])
       .catch((err) => console.error('Failed to open wishlist:', err))
-  }, [fetchWishlistGames, loadWishlistIdentities, setAndPersistSidePanelMode])
+  }, [applyViewSort, fetchWishlistGames, loadWishlistIdentities, setAndPersistSidePanelMode])
 
   const openFavorites = useCallback(() => {
     setLibraryView('grid')
@@ -1175,8 +1205,8 @@ const App = () => {
     // games list open via setAndPersistSidePanelMode, which also WROTE that to
     // settings -- so a user who kept the list hidden had it reopened, and the
     // change stuck across restarts.
-    handleFilterChange(favoriteFilters)
-  }, [handleFilterChange])
+    applyViewSort('local', favoriteFilters)
+  }, [applyViewSort])
 
   const handleWishlistChanged = useCallback(async (result = {}, sourceGame = null) => {
     const identityKey = result.identityKey || getWishlistIdentityKey(sourceGame || result.entry || {})
@@ -1222,10 +1252,11 @@ const App = () => {
       handleFilterChange({ ...defaultFilters, includeUninstalled: true, installState: 'all' })
     } else {
       handleResetFilters()
+      persistViewSort(libraryMode, defaultFilters)
     }
     gridRef.current?.recomputeGridSize?.()
     gridRef.current?.forceUpdate?.()
-  }, [handleResetFilters, handleFilterChange, libraryMode])
+  }, [handleResetFilters, handleFilterChange, libraryMode, persistViewSort])
 
   const loadSavedFilters = useCallback(() => {
     return window.electronAPI
@@ -1270,9 +1301,11 @@ const App = () => {
     setActiveSavedFilterId(filter.id || '')
     if (filter.id === 'builtin-wishlist') {
       setLibraryMode('catalog')
+    } else {
+      persistViewSort(libraryMode, nextFilters)
     }
     handleFilterChange(nextFilters)
-  }, [handleFilterChange])
+  }, [handleFilterChange, libraryMode, persistViewSort])
 
   const deleteSavedFilter = useCallback(async (filter, action = 'request') => {
     if (!filter?.id || filter.builtIn) return
@@ -2238,7 +2271,7 @@ const App = () => {
               mode="inline"
               side="left"
               onSearchChange={handleSearchChange}
-              onFilterChange={handleFilterChange}
+              onFilterChange={handleViewFilterChange}
               onResetFilters={resetFilters}
               onSavedFilterSaved={handleSavedFilterSaved}
               activeSavedFilterId={activeSavedFilterId}
@@ -2573,7 +2606,7 @@ const App = () => {
             mode="inline"
             side="right"
             onSearchChange={handleSearchChange}
-            onFilterChange={handleFilterChange}
+            onFilterChange={handleViewFilterChange}
             onResetFilters={resetFilters}
             onSavedFilterSaved={handleSavedFilterSaved}
             activeSavedFilterId={activeSavedFilterId}
@@ -2595,7 +2628,7 @@ const App = () => {
             mode="overlay"
             side={filterSidebarSide}
             onSearchChange={handleSearchChange}
-            onFilterChange={handleFilterChange}
+            onFilterChange={handleViewFilterChange}
             onResetFilters={resetFilters}
             onSavedFilterSaved={handleSavedFilterSaved}
             activeSavedFilterId={activeSavedFilterId}
