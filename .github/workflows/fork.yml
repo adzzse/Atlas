@@ -1,0 +1,80 @@
+name: Atlas Fork Prerelease
+
+on:
+  push:
+    branches: [fork]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'adzzse/Atlas' && github.ref == 'refs/heads/fork'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GH_REPO: adzzse/Atlas
+    steps:
+      - name: Checkout personal branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check source and regression tests
+        run: npm run check
+
+      - name: Prepare draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # fork.0 is local-only; fork.1 bootstraps the first local installation.
+          $number = [long]$env:GITHUB_RUN_NUMBER + 1
+          $base = (Get-Content package.json | ConvertFrom-Json).version.Split('-')[0]
+          $version = "$base-fork.$number"
+          $tag = "v$version"
+          "FORK_BUILD_NUMBER=$number" >> $env:GITHUB_ENV
+          "FORK_VERSION=$version" >> $env:GITHUB_ENV
+          "FORK_TAG=$tag" >> $env:GITHUB_ENV
+          $draft = gh release view $tag --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if ($draft -ne 'true') { throw "Release $tag is already published; refusing to overwrite it." }
+          } else {
+            gh release create $tag --draft --prerelease --target $env:GITHUB_SHA --title "Atlas $version" --notes "Personal Fork build from $env:GITHUB_SHA. Based on upstream nightly; catalog data still comes from Atlas."
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create the draft release.' }
+          }
+
+      - name: Build and upload Windows installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run publish
+
+      - name: Verify complete assets before publishing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $release = gh release view $env:FORK_TAG --json assets,isDraft | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$release.isDraft) { throw 'Expected a draft release.' }
+          $expected = @("Atlas-Setup-$env:FORK_VERSION.exe", "Atlas-Setup-$env:FORK_VERSION.exe.blockmap", 'fork.yml')
+          foreach ($name in $expected) {
+            $asset = @($release.assets | Where-Object { $_.name -eq $name -and $_.size -gt 0 -and $_.state -eq 'uploaded' })
+            if ($asset.Count -ne 1) { throw "Missing or incomplete release asset: $name" }
+          }
+          gh release edit $env:FORK_TAG --draft=false --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish the Fork release.' }
