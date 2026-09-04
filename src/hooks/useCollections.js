@@ -63,6 +63,18 @@ export function useCollections({ enabled = true } = {}) {
     return map
   }, [state.memberships])
 
+  // Membership in any hidden collection wins in the main library. Keeping the
+  // ids separate lets an explicit collection view bypass hiding without
+  // mutating the games or their memberships.
+  const hiddenCollectionIds = useMemo(
+    () => new Set(
+      state.collections
+        .filter((collection) => collection.hideFromLibrary === true)
+        .map((collection) => Number(collection.id)),
+    ),
+    [state.collections],
+  )
+
   // collectionId -> Set(record_id), for membership tests while filtering.
   const recordIdsByCollection = useMemo(() => {
     const map = new Map()
@@ -88,6 +100,7 @@ export function useCollections({ enabled = true } = {}) {
     collections: state.collections,
     artRecordIds: state.artRecordIds,
     collectionIdsByRecord,
+    hiddenCollectionIds,
     recordIdsByCollection,
     getCollectionsForRecord,
     isUncategorized,

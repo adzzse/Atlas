@@ -15,6 +15,7 @@ import GameTree from './components/library/GameTree.jsx'
 import CollectionsView from './components/collections/CollectionsView.jsx'
 import CollectionModal from './components/collections/CollectionModal.jsx'
 import BulkTagModal from './components/collections/BulkTagModal.jsx'
+import { buildCollectionContextMenu } from './components/collections/collectionMenu.js'
 import { useCollections, UNCATEGORIZED_ID } from './hooks/useCollections.js'
 import { retainImage } from './utils/imageRetention.js'
 import { toMediaSrc } from './utils/mediaSrc.js'
@@ -298,7 +299,7 @@ const App = () => {
   // hang membership off, so the collections button and grouping are hidden in
   // those modes and Browse keeps the list it already had.
   const {
-    collections, artRecordIds, collectionIdsByRecord, recordIdsByCollection,
+    collections, artRecordIds, collectionIdsByRecord, hiddenCollectionIds, recordIdsByCollection,
     loading: collectionsLoading, refresh: refreshCollections,
   } = useCollections({ enabled: true })
   // 'grid' is the normal library; 'collections' is the tile screen.
@@ -353,6 +354,7 @@ const App = () => {
     filteredGames: localFilteredGames, installedGameCount, uninstalledGameCount,
   } = useFilters(games, includeUninstalledRef, fetchGames, setSelectedGame, {
     collectionIdsByRecord,
+    hiddenCollectionIds,
     initialFilters: getViewSortPreference(viewSortPreferencesRef.current, 'local'),
   })
   const persistViewSort = useCallback((mode, filters) => {
@@ -433,7 +435,7 @@ const App = () => {
       ? catalogWithWishlist
       : libraryMode === 'wishlist'
         ? wishlistFilteredGames
-        : localFilteredGames
+        : collectionsLoading ? [] : localFilteredGames
   // The library grid must not claim to be empty while data is still arriving, nor
   // when the database reports records that are not in state yet. get-games has to
   // resolve every record's version list before it returns, so on a large library
@@ -442,7 +444,9 @@ const App = () => {
   // well before get-games, so the real total is usually known on first render.
   const expectedLibraryCount = libraryStats?.games || 0
   const libraryIsLoading =
-    libraryMode === 'wishlist' ? wishlistLoading : libraryMode === 'local' && gamesLoading
+    libraryMode === 'wishlist'
+      ? wishlistLoading
+      : libraryMode === 'local' && (gamesLoading || collectionsLoading)
   // The fetch finished, returned nothing, and yet the database reports records.
   // Deliberately NOT folded into the spinner condition above: that would spin
   // forever on a failed fetch. This is a genuine anomaly, so it gets its own
@@ -832,34 +836,7 @@ const App = () => {
   // collection-rename-requested / collection-delete-requested.
   const handleCollectionContextMenu = useCallback((collection) => {
     if (!collection) return
-    window.electronAPI.showContextMenu([
-      {
-        label: 'Rename',
-        data: {
-          action: 'collectionRenameRequested',
-          collectionId: collection.id,
-          name: collection.name,
-          color: collection.color,
-        },
-      },
-      {
-        label: 'Tag All Games…',
-        data: {
-          action: 'collectionBulkTagRequested',
-          collectionId: collection.id,
-          name: collection.name,
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Delete Collection',
-        data: {
-          action: 'collectionDeleteRequested',
-          collectionId: collection.id,
-          name: collection.name,
-        },
-      },
-    ])
+    window.electronAPI.showContextMenu(buildCollectionContextMenu(collection))
   }, [])
 
   // One opener for the grid and the tree, so both menus are identical.

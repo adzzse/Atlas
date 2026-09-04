@@ -15,12 +15,16 @@ let launchCalls = []
 let broadcastCalls = []
 let toggleWishlistResult
 let toggleWishlistCalls = []
+let collectionVisibilityCalls = []
+let collectionBroadcastCount = 0
 
 beforeEach(() => {
   ipcHandlers.clear()
   launchCalls = []
   broadcastCalls = []
   toggleWishlistCalls = []
+  collectionVisibilityCalls = []
+  collectionBroadcastCount = 0
   toggleWishlistResult = async () => ({ success: true })
 
   const electronStub = {
@@ -60,6 +64,19 @@ beforeEach(() => {
           toggleWishlistCalls.push(entry)
           return toggleWishlistResult(entry)
         },
+      }
+    }
+    if (request === '../db/collections') {
+      return {
+        setCollectionHiddenFromLibrary: async (...args) => {
+          collectionVisibilityCalls.push(args)
+          return { success: true }
+        },
+      }
+    }
+    if (request === './collections') {
+      return {
+        broadcastCollectionsChanged: () => { collectionBroadcastCount += 1 },
       }
     }
     return originalLoad.call(this, request, parent, isMain)
@@ -120,6 +137,19 @@ describe('run-context-action', () => {
   test('an action that reports nothing still reads as success', async () => {
     const run = register()
     const result = await run({ sender: null }, { action: 'properties', recordId: 7 })
+    expect(result.success).toBe(true)
+  })
+
+  test('collection visibility writes once and broadcasts a refresh', async () => {
+    const run = register()
+    const result = await run({ sender: null }, {
+      action: 'setCollectionHiddenFromLibrary',
+      collectionId: 4,
+      hideFromLibrary: true,
+    })
+
+    expect(collectionVisibilityCalls).toEqual([[4, true]])
+    expect(collectionBroadcastCount).toBe(1)
     expect(result.success).toBe(true)
   })
 

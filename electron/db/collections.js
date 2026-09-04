@@ -90,6 +90,9 @@ const COLLECTIONS_DDL = [
      added_at INTEGER,
      PRIMARY KEY (collection_id, record_id)
    );`,
+  // Existing databases predate the visibility flag. initializeDatabase ignores
+  // duplicate-column errors, so the same ordered list covers old and fresh DBs.
+  `ALTER TABLE collections ADD COLUMN hide_from_library INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 const COLLECTIONS_INDEXES = [
@@ -113,6 +116,7 @@ async function getCollections() {
       c.id,
       c.name,
       c.color,
+      c.hide_from_library,
       c.sort_order,
       c.created_at,
       c.updated_at,
@@ -126,6 +130,7 @@ async function getCollections() {
     id: row.id,
     name: row.name,
     color: row.color || null,
+    hideFromLibrary: row.hide_from_library === 1,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -241,6 +246,20 @@ async function setCollectionColor(collectionId, color) {
   return { success: true, id }
 }
 
+// Visibility belongs to the collection so adding or removing membership changes
+// the main library automatically instead of copying a flag onto every title.
+async function setCollectionHiddenFromLibrary(collectionId, hideFromLibrary) {
+  const id = normalizeId(collectionId)
+  if (!id) return { success: false, error: 'Invalid collection' }
+  const hidden = hideFromLibrary === true ? 1 : 0
+  const result = await run(
+    `UPDATE collections SET hide_from_library = ?, updated_at = ? WHERE id = ?`,
+    [hidden, now(), id],
+  )
+  if (!result.changes) return { success: false, error: 'Collection not found' }
+  return { success: true, id, hideFromLibrary: hidden === 1 }
+}
+
 // Deleting a collection only removes the grouping. Its titles fall back to
 // Uncategorized automatically because membership rows go with it (the FK is
 // ON DELETE CASCADE, but foreign_keys pragma state varies, so the child delete
@@ -327,6 +346,7 @@ module.exports = {
   createCollection,
   renameCollection,
   setCollectionColor,
+  setCollectionHiddenFromLibrary,
   deleteCollection,
   addGameToCollection,
   removeGameFromCollection,

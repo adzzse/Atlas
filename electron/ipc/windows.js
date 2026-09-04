@@ -6,9 +6,8 @@ const fs = require('fs')
 const { launchGame } = require('./games')
 
 
-// Async because openFolder REPORTS. Every other action is still fire-and-forget
-// and returns nothing, which run-context-action reads as success -- so only the
-// case that has something to say has to say it.
+// Async because openFolder and collection visibility report outcomes. Other
+// actions remain fire-and-forget, which run-context-action reads as success.
 async function handleContextAction(data, sender, ctx) {
   if (!data || typeof data.action === "undefined") {
     console.error("handleContextAction: Invalid or missing data object", data);
@@ -146,6 +145,17 @@ async function handleContextAction(data, sender, ctx) {
         })
         .catch((err) => console.error("Context remove from collection failed:", err));
       break;
+    }
+    case "setCollectionHiddenFromLibrary": {
+      const { setCollectionHiddenFromLibrary } = require("../db/collections");
+      const { broadcastCollectionsChanged } = require("./collections");
+      const result = await setCollectionHiddenFromLibrary(
+        data.collectionId,
+        data.hideFromLibrary === true,
+      );
+      if (result?.success) broadcastCollectionsChanged();
+      else console.error("Collection visibility update failed:", result?.error);
+      return result;
     }
     case "collectionRenameRequested": {
       // Same reason as newCollectionWithGame: native menus can't prompt, so the

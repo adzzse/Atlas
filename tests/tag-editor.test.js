@@ -46,11 +46,12 @@ test('both hosts drive the editor from useTagState', () => {
 // ── Bulk tagging entry point ────────────────────────────────────────────────
 
 const app = read('src/App.jsx')
+const collectionMenu = read('src/components/collections/collectionMenu.js')
 const bulkModal = read('src/components/collections/BulkTagModal.jsx')
 
 test('the collection tile menu offers bulk tagging', () => {
-  expect(app).toContain("label: 'Tag All Games…'")
-  expect(app).toContain('collectionBulkTagRequested')
+  expect(collectionMenu).toContain("label: 'Tag All Games…'")
+  expect(collectionMenu).toContain('collectionBulkTagRequested')
 })
 
 test('the bulk dialog is wired to the round-trip channel', () => {

@@ -1054,12 +1054,18 @@ export const filterGamesWithState = (games, filters = {}, options = {}) => {
   // a Map of record_id -> [collectionId]) rather than joined onto each game row:
   // getGames already carries a GROUP_CONCAT over tags under a GROUP BY, so a
   // second one-to-many join there would corrupt the tag list.
+  const collectionIdsByRecord = options.collectionIdsByRecord
+  if (activeFilters.collectionIds.length === 0 && options.hiddenCollectionIds?.size > 0) {
+    result = result.filter((game) => {
+      const collectionIds = collectionIdsByRecord?.get(Number(game.record_id)) || []
+      return !collectionIds.some((id) => options.hiddenCollectionIds.has(Number(id)))
+    })
+  }
   if (activeFilters.collectionIds.length > 0) {
     const wanted = new Set(activeFilters.collectionIds.map(String))
     const includeUncategorized = wanted.has('uncategorized')
-    const lookup = options.collectionIdsByRecord
     result = result.filter((game) => {
-      const ids = lookup?.get(Number(game.record_id)) || []
+      const ids = collectionIdsByRecord?.get(Number(game.record_id)) || []
       if (ids.length === 0) return includeUncategorized
       return ids.some((id) => wanted.has(String(id)))
     })
@@ -1364,9 +1370,13 @@ export function useFilters(games, includeUninstalledRef, fetchGames, setSelected
   }, [includeUninstalledRef, fetchGames, setSelectedGame])
 
   const collectionIdsByRecord = filterOptions?.collectionIdsByRecord
+  const hiddenCollectionIds = filterOptions?.hiddenCollectionIds
   const filteredGames = useMemo(() => {
-    return filterGamesWithState(games, activeFilters, { collectionIdsByRecord })
-  }, [games, activeFilters, collectionIdsByRecord])
+    return filterGamesWithState(games, activeFilters, {
+      collectionIdsByRecord,
+      hiddenCollectionIds,
+    })
+  }, [games, activeFilters, collectionIdsByRecord, hiddenCollectionIds])
 
   const installedGameCount = useMemo(
     () => games.filter((game) => game.hasInstalledVersion !== false).length,

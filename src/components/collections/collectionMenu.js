@@ -6,6 +6,50 @@
 // serializable template over `show-context-menu` and the main process attaches
 // the click handlers (see electron/ipc/windows.js processTemplate).
 
+// Kept out of App.jsx so the native action payload can be tested; a dispatch
+// name typo otherwise leaves a menu item that silently does nothing.
+export function buildCollectionContextMenu(collection) {
+  if (!collection) return []
+  return [
+    {
+      label: 'Rename',
+      data: {
+        action: 'collectionRenameRequested',
+        collectionId: collection.id,
+        name: collection.name,
+        color: collection.color,
+      },
+    },
+    {
+      label: 'Hide Games from Main Library',
+      type: 'checkbox',
+      checked: collection.hideFromLibrary === true,
+      data: {
+        action: 'setCollectionHiddenFromLibrary',
+        collectionId: collection.id,
+        hideFromLibrary: collection.hideFromLibrary !== true,
+      },
+    },
+    {
+      label: 'Tag All Games…',
+      data: {
+        action: 'collectionBulkTagRequested',
+        collectionId: collection.id,
+        name: collection.name,
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Delete Collection',
+      data: {
+        action: 'collectionDeleteRequested',
+        collectionId: collection.id,
+        name: collection.name,
+      },
+    },
+  ]
+}
+
 /**
  * @param {object}   options
  * @param {number}   options.recordId     Title the menu was opened on.
