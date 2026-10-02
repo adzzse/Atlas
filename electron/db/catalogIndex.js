@@ -46,8 +46,10 @@ const {
   indexColumnsForSearchFieldIds, normalizeSearchFieldIds,
 } = require('./searchFields')
 const { extractUrlId } = require('./urlIdExtractor')
+const { getLcUserTier } = require('../accounts/accountStore')
 const { buildTagsFilterValue, normalizeTagText, normalizeTagList, splitTagSources } = require('./tagTokens')
 const { tokenPredicate, escapeLike } = require('./tagFilterSql')
+const { buildBlacklistExclusionSql } = require('./blacklistSql')
 
 // A search payload may carry `fields` (current) or `type` (legacy). Neither
 // present means the caller wants the default set.
@@ -997,13 +999,18 @@ const buildIndexWhere = (search = {}, filters = {}) => {
   const parts = []
 
   // ── LewdCorner free-tier gate ─────────────────────────────────────────────
-  // Anything carrying an lc_id is only browsable on the Free tier. Rows with no
-  // LewdCorner linkage are unaffected.
+  // Catalog-listing visibility by USER tier (detected account tier). The stored
+  // user-tier value is 'Free'/'VIP' — the same vocabulary as the content-tier
+  // column — while the Accounts page maps Free→Standard, VIP→Plus for display:
+  //   - 'VIP'         → sees all LC content (gate skipped)
+  //   - 'Free' / null → Standard-content rows only
+  // This gate governs the catalog listing only; the attachment image stream is
+  // gated by the LC server on its request cookies, not by this code.
   //
-  // NULL tier is excluded along with the paid tiers, which is deliberate but
-  // worth knowing: `tier` arrived via ALTER TABLE (see db/index.js), so LC rows
-  // scraped before that migration have no tier and are hidden until a rescrape
-  // fills it in.
+  // Rows carrying a NULL content tier fail `lct.tier = 'Free'` under SQL's
+  // three-valued logic and are hidden the same as 'VIP': the column arrived via
+  // ALTER TABLE (see db/index.js), so LC rows scraped before that migration
+  // have no tier until a rescrape fills it in.
   //
   // Read live from lewdcorner_data through the join rather than copied into
   // catalog_index: no reindex is needed to adopt this, and a rescrape that
@@ -1012,7 +1019,13 @@ const buildIndexWhere = (search = {}, filters = {}) => {
   // PK), and it sits in the shared WHERE so the count query and the page query
   // agree — filtering only the page would size the grid's scrollbar for rows it
   // never shows.
-  parts.push(`(ci.lc_id IS NULL OR lct.tier = 'Free')`)
+  //
+  // Not-logged-in (getLcUserTier returns null) is intentionally treated the same
+  // as Standard: an unauthenticated user must not see members-only content. It
+  // flips to full visibility only once tier detection reports 'VIP'.
+  if (getLcUserTier() !== 'VIP') {
+    parts.push(`(ci.lc_id IS NULL OR lct.tier = 'Free')`)
+  }
   const params = []
 
   const like = (value) => `%${escapeLike(value).toLowerCase()}%`
@@ -1188,6 +1201,11 @@ const buildIndexWhere = (search = {}, filters = {}) => {
       OR EXISTS (SELECT 1 FROM wishlist_entries w WHERE w.lc_id   IS NOT NULL AND w.lc_id   = ci.lc_id)
       OR EXISTS (SELECT 1 FROM wishlist_entries w WHERE w.steam_id IS NOT NULL AND w.steam_id = ci.steam_id))`)
   }
+
+  // Unconditional, not a filter flag: a blacklisted title stays hidden no matter
+  // which filters or saved filter is active. Mirrored in versions.js from the
+  // same builder.
+  parts.push(buildBlacklistExclusionSql('ci', 'ci.is_installed = 1'))
 
   // Generated from ratingCategories.js. This was a second hand-written copy of
   // the same average, and it drifted from the one in versions.js: both still

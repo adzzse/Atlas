@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   getCatalogGames: (args = {}) => ipcRenderer.invoke("get-catalog-games", args),
   getCatalogCount: (args = {}) => ipcRenderer.invoke("get-catalog-count", args),
+  getCatalogEntry: (ref) => ipcRenderer.invoke("get-catalog-entry", ref),
   addWishlistEntry: (entry) => ipcRenderer.invoke("wishlist-add", entry),
   removeWishlistEntry: (identity) =>
     ipcRenderer.invoke("wishlist-remove", identity),
@@ -43,6 +44,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   isWishlistEntry: (identity) => ipcRenderer.invoke("wishlist-check", identity),
   getWishlistEntries: () => ipcRenderer.invoke("wishlist-list"),
   getWishlistEntryIdentities: () => ipcRenderer.invoke("wishlist-identities"),
+  addBlacklistEntry: (entry) => ipcRenderer.invoke("blacklist-add", entry),
+  removeBlacklistEntry: (identity) =>
+    ipcRenderer.invoke("blacklist-remove", identity),
+  getBlacklistEntries: () => ipcRenderer.invoke("blacklist-list"),
   validateLibraryPaths: () => ipcRenderer.invoke("validate-library-paths"),
   removeGame: (id) => ipcRenderer.invoke("remove-game", id),
   checkUpdates: () => ipcRenderer.invoke("check-updates"),
@@ -365,6 +370,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   downloadsOpenFolder: () => ipcRenderer.invoke("downloads-open-folder"),
   downloadsAttachFile: (params) => ipcRenderer.invoke("downloads-attach-file", params),
   downloadsResolveMasked: (params) => ipcRenderer.invoke("downloads-resolve-masked", params),
+  downloadsListFolder: (params) => ipcRenderer.invoke("downloads-list-folder", params),
   downloadsInstall: (params) => ipcRenderer.invoke("downloads-install", params),
   downloadsSuggestVersion: (params) => ipcRenderer.invoke("downloads-suggest-version", params),
   hostsList: () => ipcRenderer.invoke("hosts-list"),
@@ -430,6 +436,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (event, payload) => callback(payload);
     ipcRenderer.on("wishlist-updated", handler);
     return () => ipcRenderer.removeListener("wishlist-updated", handler);
+  },
+  onBlacklistUpdated: (callback) => {
+    const handler = (event, payload) => callback(payload);
+    ipcRenderer.on("blacklist-updated", handler);
+    return () => ipcRenderer.removeListener("blacklist-updated", handler);
   },
   onDbUpdateProgress: (callback) => {
     ipcRenderer.on("db-update-progress", (event, progress) =>
@@ -667,6 +678,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   verifyAccountBrowser: (payload) => ipcRenderer.invoke("accounts-verify-browser", payload),
   saveAccount: (payload) => ipcRenderer.invoke("accounts-save", payload),
   removeAccount: (payload) => ipcRenderer.invoke("accounts-remove", payload),
+  getLcUserTier: (payload) => ipcRenderer.invoke("lewdcorner-tier", payload),
 
   // ── Steam (owned library) ───────────────────────────────────────────────
   steamStatus: () => ipcRenderer.invoke("steam-status"),

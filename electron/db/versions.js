@@ -15,8 +15,10 @@ const {
   unionColumnsForSearchFieldIds, normalizeSearchFieldIds,
 } = require('./searchFields')
 const { extractUrlId } = require('./urlIdExtractor')
+const { getLcUserTier } = require('../accounts/accountStore')
 const { normalizeTagText, normalizeTagList } = require('./tagTokens')
 const { tokenPredicate, tagColumnExpr, stripSpaces, escapeLike } = require('./tagFilterSql')
+const { buildBlacklistExclusionSql } = require('./blacklistSql')
 
 // A search payload may carry `fields` (current) or `type` (legacy, still in
 // saved_filters.json). Neither means "use the default set".
@@ -1414,13 +1416,19 @@ const getCatalogGamesFromUnion = (appPath, isDev, options = {}) => {
     // Mirrors buildIndexWhere in catalogIndex.js. Both paths have to carry it:
     // this union is the fallback used whenever catalog_index is missing or stale,
     // so filtering only the fast path would make the same browse show different
-    // rows depending on index state.
+    // rows depending on index state. The stored user-tier value 'VIP' sees all
+    // LC content (gate skipped); 'Free'/'null' see Standard-content rows only.
     //
     // No join needed here — all four union branches already select lc_id and
-    // lewdcornerTier (NULL in the steam and gog branches). NULL tier is excluded
-    // with the paid tiers, so LC rows scraped before the tier column was added
-    // stay hidden until a rescrape fills it in.
-    filterWhereParts.push(`(catalog.lc_id IS NULL OR catalog.lewdcornerTier = 'Free')`);
+    // lewdcornerTier (NULL in the steam and gog branches). Rows with a NULL
+    // content tier fail `= 'Free'` and are hidden the same as 'VIP', until a
+    // rescrape fills the tier in.
+    //
+    // Not-logged-in (getLcUserTier returns null) is treated the same as Standard:
+    // an unauthenticated user must not see members-only content.
+    if (getLcUserTier() !== 'VIP') {
+      filterWhereParts.push(`(catalog.lc_id IS NULL OR catalog.lewdcornerTier = 'Free')`);
+    }
     const toArray = (value) => {
       if (Array.isArray(value)) return value.filter((item) => item !== undefined && item !== null && String(item).trim() !== '').map(String);
       if (value === undefined || value === null || value === '') return [];
@@ -1594,6 +1602,10 @@ const getCatalogGamesFromUnion = (appPath, isDev, options = {}) => {
                 WHERE wishlist.steam_id IS NOT NULL AND wishlist.steam_id = catalog.steam_id)
       )`);
     }
+    // Same clause as buildIndexWhere in catalogIndex.js. Without it a blacklisted
+    // title reappears whenever Browse falls back to this path (index not ready
+    // yet, updateAvailable, or a fast-path error).
+    filterWhereParts.push(buildBlacklistExclusionSql('catalog', 'catalog.is_installed = 1'));
     // Generated from ratingCategories.js. The previous literal version listed
     // the columns by hand, still counted fappability, and treated an explicit 0
     // as a real score, so rating one category 0 dragged the average down instead

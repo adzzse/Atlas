@@ -156,6 +156,7 @@ const App = () => {
   const [wishlistIdentityKeys, setWishlistIdentityKeys] = useState(new Set())
   const [activeSavedFilterId, setActiveSavedFilterId] = useState('')
   const [savedFilterDeleteStateById, setSavedFilterDeleteStateById] = useState({})
+  const [resetInputSignal, setResetInputSignal] = useState(0)
   // Banner card dimensions for Grid sizing — derived from the same
   // resolved template BannerTemplateProvider already computed once for
   // <GameBanner> (see src/theme/BannerTemplateProvider.jsx), rather than
@@ -874,8 +875,20 @@ const App = () => {
         return { ...prev, isWishlisted: !prev.isWishlisted }
       })
     }
+    if (data.action === 'blacklistGame') {
+      // The success path needs nothing here: the main process broadcasts
+      // blacklist-updated and handleBlacklistUpdated refetches Browse. Only a
+      // failure is read, because no broadcast follows one and the title would
+      // otherwise just stay put with no explanation.
+      window.electronAPI.runContextAction?.(data).then((result) => {
+        if (result?.success === false) {
+          toast.error('Could not blacklist this game', { message: result.error || 'Unknown error' })
+        }
+      })
+      return
+    }
     window.electronAPI.runContextAction?.(data)
-  }, [])
+  }, [toast])
 
   const selectGame = useCallback((game) => {
     setShowSearchSidebar(false)
@@ -1207,6 +1220,14 @@ const App = () => {
     }
   }, [fetchWishlistGames, libraryMode])
 
+  // The detail page for a title that was just blacklisted has nothing left to
+  // show, so it closes back to the grid. Refreshing Browse is left to the
+  // blacklist-updated broadcast, the same one a Settings removal or a
+  // context-menu blacklist sends, so there is one refresh path, not three.
+  const handleBlacklisted = useCallback(() => {
+    setSelectedGame(null)
+  }, [])
+
   const toggleSearchSidebar = useCallback(() => {
     if (selectedGame) return
     setShowSearchSidebar((prev) => !prev)
@@ -1221,6 +1242,7 @@ const App = () => {
     setActiveSavedFilterId('')
     pendingLibraryScrollTopRestoreRef.current = 0
     libraryScrollTopRef.current = 0
+    setResetInputSignal((n) => n + 1)
     if (libraryMode === 'catalog') {
       // "Reset" in Browse mode should mean the whole catalog, not the
       // local library's installed-only default — otherwise resetting
@@ -1783,9 +1805,26 @@ const App = () => {
       })
     }
 
+    // Sent after any blacklist write, from any window. Browse is refetched from
+    // the first page rather than patched: its row set and total are decided by
+    // the exclusion in the catalog SQL, and dropping one row out of the sparse
+    // array would shift every page already loaded behind it. The wishlist is
+    // re-read only when blacklisting actually removed an entry from it.
+    const handleBlacklistUpdated = (payload) => {
+      if (browseAvailableRef.current) {
+        fetchCatalogGames({ search: catalogSearchRef.current, filters: catalogQueryFiltersRef.current })
+      }
+      if (payload?.removedFromWishlist === true) {
+        fetchWishlistGames()
+        loadWishlistIdentities()
+      }
+    }
+
     window.electronAPI.onWindowStateChanged(handleWindowStateChanged)
     const removeWishlistUpdatedListener =
       window.electronAPI.onWishlistUpdated?.(handleWishlistUpdated)
+    const removeBlacklistUpdatedListener =
+      window.electronAPI.onBlacklistUpdated?.(handleBlacklistUpdated)
     window.electronAPI.onDbUpdateProgress(handleDbUpdateProgress)
     window.electronAPI.onImportProgress(handleImportProgress)
     window.electronAPI.onGameImported(handleGameImported)
@@ -1873,6 +1912,7 @@ const App = () => {
       if (typeof removeCollectionBulkTagListener === 'function') removeCollectionBulkTagListener()
       if (typeof removeRateTitleListener === 'function') removeRateTitleListener()
       if (typeof removeWishlistUpdatedListener === 'function') removeWishlistUpdatedListener()
+      if (typeof removeBlacklistUpdatedListener === 'function') removeBlacklistUpdatedListener()
       window.removeEventListener('resize', debounceResize)
       ;[
         'window-state-changed', 'db-update-progress', 'import-progress',
@@ -1900,7 +1940,11 @@ const App = () => {
     }
   }, [filterSidebarMode, selectedGame])
 
-  const catalogResetDebounceRef = useRef(null)
+  // Search input already debounces via useDebouncedSearch (SearchBox/
+  // SearchSidebar) before activeFilters updates, so debouncing again here
+  // would stack an extra delay before the spinner shows. Fetch immediately
+  // once the debounced filters arrive; the paramsKey guard still prevents
+  // the catalogTotal/enter-mode re-runs from wiping correct data.
   useEffect(() => {
     if (libraryMode !== 'catalog' || !browseAvailable) return
     const paramsKey = catalogParamsKey(catalogSearch, catalogQueryFilters)
@@ -1913,18 +1957,8 @@ const App = () => {
       // the "banners flash, spinner, banners reload" sequence this fixes.
       return
     }
-    if (catalogResetDebounceRef.current) clearTimeout(catalogResetDebounceRef.current)
-    catalogResetDebounceRef.current = setTimeout(() => {
-      catalogResetDebounceRef.current = null
-      lastFetchedCatalogParamsKeyRef.current = paramsKey
-      fetchCatalogGames({ reset: true, search: catalogSearch, filters: catalogQueryFilters })
-    }, 300)
-    return () => {
-      if (catalogResetDebounceRef.current) {
-        clearTimeout(catalogResetDebounceRef.current)
-        catalogResetDebounceRef.current = null
-      }
-    }
+    lastFetchedCatalogParamsKeyRef.current = paramsKey
+    fetchCatalogGames({ reset: true, search: catalogSearch, filters: catalogQueryFilters })
   }, [browseAvailable, catalogQueryFilters, catalogSearch, catalogTotal, fetchCatalogGames, libraryMode])
 
   // When the catalog index finishes building, anything already on screen in
@@ -1997,7 +2031,7 @@ const App = () => {
         <div
           className="w-[60px] bg-accent flex items-center justify-center h-[70px] z-50 cursor-pointer -webkit-app-region-no-drag shadow-[0_8px_8px_-8px_rgba(0,0,0,0.5)]"
           onClick={goHome}
-          title="Back to Library"
+          title="Home"
         >
           {logoVariant === 'colored' ? (
             <img
@@ -2036,7 +2070,7 @@ const App = () => {
                 <div
                   className="text-shadow-fx text-glow-fx page-titles text-accent font-semibold cursor-pointer -webkit-app-region-no-drag"
                   onClick={goHome}
-                  title="Back to Library"
+                  title="Home"
                 >
                   {viewTitle}
                 </div>
@@ -2117,7 +2151,7 @@ const App = () => {
               // layout there is no search box here and Collections is a nav
               // button instead (see TopNav's LEFT_ORDER).
               <div className="flex justify-center w-full">
-                <SearchBox value={activeFilters.text} onSearchChange={handleSearchChange} onToggleSidebar={toggleSearchSidebar} />
+                <SearchBox value={activeFilters.text} onSearchChange={handleSearchChange} onToggleSidebar={toggleSearchSidebar} resetInputSignal={resetInputSignal} />
               </div>
             )}
           </div>
@@ -2255,6 +2289,7 @@ const App = () => {
               savedFilterDeleteStateById={savedFilterDeleteStateById}
               onApplySavedFilter={applySavedFilter}
               onDeleteSavedFilter={deleteSavedFilter}
+              resetInputSignal={resetInputSignal}
               onClose={() => setShowSearchSidebar(false)}
             />
           </div>
@@ -2366,6 +2401,7 @@ const App = () => {
               onBack={goBackToLibrary}
               onRefresh={refreshDetailGame}
               onWishlistChanged={handleWishlistChanged}
+              onBlacklisted={handleBlacklisted}
               openRatingFor={pendingRatingRecordId}
               onRatingOpened={() => setPendingRatingRecordId(null)}
             />
@@ -2590,6 +2626,7 @@ const App = () => {
             savedFilterDeleteStateById={savedFilterDeleteStateById}
             onApplySavedFilter={applySavedFilter}
             onDeleteSavedFilter={deleteSavedFilter}
+            resetInputSignal={resetInputSignal}
             onClose={() => setShowSearchSidebar(false)}
           />
         )}
@@ -2612,6 +2649,7 @@ const App = () => {
             savedFilterDeleteStateById={savedFilterDeleteStateById}
             onApplySavedFilter={applySavedFilter}
             onDeleteSavedFilter={deleteSavedFilter}
+            resetInputSignal={resetInputSignal}
             onClose={() => setShowSearchSidebar(false)}
           />
         )}

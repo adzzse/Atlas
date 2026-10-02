@@ -207,5 +207,6 @@ Thêm một dòng sau mỗi lần tích hợp; giữ các mốc cũ để truy v
 | Ngày | Nightly tag / SHA | Fork SHA / release | F01–F09 | Check / runtime | Kết quả và vấn đề còn lại |
 | --- | --- | --- | --- | --- | --- |
 | 03/09/2026 | Baseline `cd8ad077`; thông báo đã ghi nhận `v0.9.9-nightly.494` | `fa50638` / `.2`; đang cài `.1 local` | Đã kiểm chứng theo mục 4 | Check PASS; runtime `.1` PASS | `.2` đã phát hành, chưa cài trong mốc này |
+| 02/10/2026 | `v0.9.10-nightly.503` / `56ad0d4` | Local source sync; nền `0.9.10` | Giữ nguyên diff của 43 file tùy biến; regression PASS | `npm run check` PASS: 144 files, 1.548 passed, 7 skipped; renderer build PASS | Cherry-pick 9 first-parent deltas vào Fork; build và cài local từ commit tích hợp này. |
 
 Khi thêm tùy biến: ghi mã F mới, hành vi cần giữ, file/test, commit và bằng chứng; không xóa mục cũ chỉ vì upstream thay cấu trúc file.

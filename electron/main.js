@@ -346,6 +346,30 @@ function registerLewdCornerMediaHeaders() {
   registerMediaAuthHeaders()
 }
 
+// Dev-only diagnostic for the LewdCorner tier check. When verifyLcTier()
+// reports lcTierMismatch, the LewdCorner shop page parser read no owned
+// rank but the thread probe — which reflects real content access — concluded
+// the user is Plus. That mismatch is the stale-selector signal: the [LewdCorner]
+// config keys (statusPillClass / statusPillOwnedToken / statusPillOwnedText)
+// likely no longer match LC's markup. Gated on !app.isPackaged so it never
+// fires in a shipped build; the user-facing tier gate stays correct regardless
+// because the probe already resolved the real tier.
+function warnOnLcTierMismatch(result) {
+  if (app.isPackaged || !result) return
+  if (result.lcTierMismatch === true) {
+    console.warn(
+      'LewdCorner shop parser looks stale: shop reported \'Free\' but ' +
+      'the thread probe confirmed real content access. Check the [LewdCorner] ' +
+      'statusPill selectors in the config.',
+    )
+    return
+  }
+  if (result.ok && result.tier) {
+    const src = result.fromCache ? ' (cached)' : ''
+    console.log(`LewdCorner tier: ${result.tier}${src}`)
+  }
+}
+
 // ── App data paths ──────────────────────────────────────────────────────────
 
 app.commandLine.appendSwitch('force-color-profile', 'srgb')
@@ -1489,7 +1513,7 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/renderer/index.html'))
   }
-  if (process.defaultApp || appConfig?.Interface?.showDebugConsole) {
+  if (appConfig?.Interface?.showDebugConsole) {
     mainWindow.webContents.openDevTools()
   }
   mainWindow.on('maximize', () => mainWindow.webContents.send('window-state-changed', 'maximized'))
@@ -1538,7 +1562,7 @@ function createSettingsWindow(options = {}) {
   } else {
     settingsWindow.loadFile(path.join(__dirname, '../dist/renderer/settings.html'), tourQuery ? { search: tourQuery } : undefined)
   }
-  if (process.defaultApp || appConfig?.Interface?.showDebugConsole) {
+  if (appConfig?.Interface?.showDebugConsole) {
     settingsWindow.webContents.openDevTools()
   }
   settingsWindow.on('maximize', () => settingsWindow.webContents.send('window-state-changed', 'maximized'))
@@ -1590,7 +1614,7 @@ function createThemeBuilderWindow() {
   } else {
     themeBuilderWindow.loadFile(path.join(__dirname, '../dist/renderer/themebuilder.html'))
   }
-  if (process.defaultApp || appConfig?.Interface?.showDebugConsole) {
+  if (appConfig?.Interface?.showDebugConsole) {
     themeBuilderWindow.webContents.openDevTools()
   }
   themeBuilderWindow.on('maximize', () => themeBuilderWindow.webContents.send('window-state-changed', 'maximized'))
@@ -1664,7 +1688,7 @@ function createBannerEditorWindow() {
   } else {
     bannerEditorWindow.loadFile(path.join(__dirname, '../dist/renderer/bannereditor.html'))
   }
-  if (process.defaultApp || appConfig?.Interface?.showDebugConsole) {
+  if (appConfig?.Interface?.showDebugConsole) {
     bannerEditorWindow.webContents.openDevTools()
   }
   bannerEditorWindow.on('maximize', () => bannerEditorWindow.webContents.send('window-state-changed', 'maximized'))
@@ -1748,7 +1772,7 @@ function createImporterWindow(source = 'atlas') {
   ).then(() => {
     console.log('importer.html loaded successfully')
     sendImporterSource(importerSource)
-    if (process.defaultApp || appConfig?.Interface?.showDebugConsole) {
+    if (appConfig?.Interface?.showDebugConsole) {
       importerWindow.webContents.openDevTools()
     }
   }).catch((err) => {
@@ -1790,7 +1814,7 @@ function createGameDetailsWindow(recordId) {
   } else {
     win.loadFile(path.join(__dirname, '../dist/renderer/gamedetails.html'))
   }
-  if (process.defaultApp || appConfig?.Interface?.showDebugConsole) {
+  if (appConfig?.Interface?.showDebugConsole) {
     win.webContents.openDevTools()
   }
   win.on('maximize', () => win.webContents.send('window-state-changed', 'maximized'))
@@ -2352,10 +2376,31 @@ app.whenReady().then(async () => {
   // Load encrypted site accounts before the window (and its webRequest cookie
   // hook) come up, then refresh any expired sessions in the background.
   try {
-    accountStore.init(dataDir)
+    accountStore.init(dataDir, appConfig?.LewdCorner)
     accountStore.refreshAllAccounts().catch((err) =>
       console.warn('Account cookie refresh failed:', err.message),
     )
+    // Tier verification: scrape LC membership tier after cookies are fresh.
+    // Runs in the background on startup and periodically. The recheck interval
+    // reads lcTierRecheckHours from config (default 24h); a recheck that finds the
+    // cached tier still fresh is skipped inside verifyLcTier, so this only scrapes
+    // when actually stale. Re-linking the account re-triggers it immediately via
+    // commitAccount's forced verifyLcTier.
+    const lcTierRecheckHours = Number(appConfig?.LewdCorner?.lcTierRecheckHours)
+    const lcTierRecheckInterval =
+      (Number.isFinite(lcTierRecheckHours) ? lcTierRecheckHours : 24) * 60 * 60 * 1000
+    const runLcTierCheck = () =>
+      accountStore.verifyLcTier().then((result) => {
+        warnOnLcTierMismatch(result)
+      })
+    runLcTierCheck().catch((err) =>
+      console.warn('Initial tier check failed:', err.message),
+    )
+    setInterval(() => {
+      runLcTierCheck().catch((err) =>
+        console.warn('Periodic tier check failed:', err.message),
+      )
+    }, lcTierRecheckInterval)
   } catch (err) {
     console.warn('Account store init failed:', err.message)
   }
