@@ -68,6 +68,7 @@ function registerCollectionsHandlers() {
       const result = await createCollection({
         name: payload?.name,
         color: payload?.color,
+        groupByCreator: payload?.groupByCreator,
       })
       if (result.success) broadcastCollectionsChanged()
       return result
@@ -77,9 +78,9 @@ function registerCollectionsHandlers() {
     }
   })
 
-  ipcMain.handle('rename-collection', async (event, { collectionId, name } = {}) => {
+  ipcMain.handle('rename-collection', async (event, { collectionId, name, groupByCreator } = {}) => {
     try {
-      const result = await renameCollection(collectionId, name)
+      const result = await renameCollection(collectionId, name, { groupByCreator })
       if (result.success) broadcastCollectionsChanged()
       return result
     } catch (err) {

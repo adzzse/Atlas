@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import LibraryDestination from '../library/LibraryDestination.jsx'
 
 // ── Install modal ────────────────────────────────────────────────────────────
 //
@@ -23,6 +24,7 @@ const CONFIDENCE_NOTE = {
 
 export default function InstallModal({ item, suggestion, open, onClose, onInstalled }) {
   const [version, setVersion] = useState('')
+  const [collectionId, setCollectionId] = useState(null)
   const [mode, setMode] = useState('replace')
   // Which existing build to replace. Asked rather than inferred: this decides
   // which directory is deleted, and the main process was choosing it with
@@ -38,6 +40,7 @@ export default function InstallModal({ item, suggestion, open, onClose, onInstal
     setVersion(suggestion?.version || item?.version || '')
     setMode(item?.onComplete === 'add' ? 'add' : 'replace')
     setKeepArchive(false)
+    setCollectionId(null)
     // Default to the build the library treats as current, then the only
     // installed one. Never to "whichever came first", which is what the main
     // process used to do.
@@ -90,6 +93,7 @@ export default function InstallModal({ item, suggestion, open, onClose, onInstal
       version: clean,
       onComplete: mode,
       keepArchive,
+      collectionId,
       // Only meaningful when replacing. Sent as a version id rather than a name
       // because names are not unique enough to delete a folder on.
       replaceVersionId: mode === 'replace' && replaceVersionId ? Number(replaceVersionId) : null,
@@ -107,7 +111,7 @@ export default function InstallModal({ item, suggestion, open, onClose, onInstal
       className="fixed inset-0 z-[1500] bg-black/60 flex items-center justify-center p-4"
       onClick={(event) => { if (event.target === event.currentTarget) onClose?.() }}
     >
-      <div className="w-full max-w-md rounded-lg border border-border bg-primary shadow-2xl overflow-hidden">
+      <div className="w-full max-w-md max-h-[90vh] flex flex-col rounded-lg border border-border bg-primary shadow-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border">
           <h2 className="text-base text-text truncate">Install {item.title}</h2>
           {item.fileName && (
@@ -115,7 +119,7 @@ export default function InstallModal({ item, suggestion, open, onClose, onInstal
           )}
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 overflow-y-auto">
           {cannotCreateRecord && (
             <div className="rounded border border-danger/40 bg-danger/5 p-3 text-xs text-text">
               <p className="font-medium text-danger">Not in Atlas&rsquo;s catalog</p>
@@ -256,6 +260,8 @@ export default function InstallModal({ item, suggestion, open, onClose, onInstal
             </label>
           </div>
 
+          <LibraryDestination downloadId={item.id} version={version} collectionId={collectionId} onCollectionChange={setCollectionId} />
+
           <label className="flex items-start gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -274,7 +280,7 @@ export default function InstallModal({ item, suggestion, open, onClose, onInstal
           {error && <p className="text-xs text-danger">{error}</p>}
         </div>
 
-        <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
+        <div className="px-4 py-3 border-t border-border flex justify-end gap-2 shrink-0">
           <button
             type="button"
             onClick={onClose}

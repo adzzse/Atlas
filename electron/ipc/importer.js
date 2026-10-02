@@ -63,6 +63,21 @@ const {
   makeCollectionResolver,
 } = require('../scanners/externalLibrary/applyState')
 const { addWishlistEntry } = require('../db/wishlist')
+const { resolveLibraryFolderStructure, addGameToCollection } = require('../db/collections')
+
+// A collection can be deleted while extraction runs. Report that separately
+// rather than turning a successfully saved version into an extraction failure.
+async function saveInstallCollection(recordId, collectionId) {
+  if (collectionId == null) return ''
+  try {
+    const result = await addGameToCollection(collectionId, recordId)
+    if (!result.success) return `Game installed, but collection was not saved: ${result.error}`
+    require('./collections').broadcastCollectionsChanged()
+    return ''
+  } catch (error) {
+    return `Game installed, but collection was not saved: ${error.message}`
+  }
+}
 
 let ownerMainWindow = null
 let nextScanId = 1
@@ -2003,7 +2018,8 @@ ipcMain.handle("import-catalog-entry", async (event, payload = {}) => {
     let gamePath = "";
     let execPath = "";
     let relativeExec = "";
-    const targetBase = getUniquePath(buildStructuredImportPath(targetLibrary, destinationFormat, importGame));
+    const resolvedFormat = await resolveLibraryFolderStructure(destinationFormat, { recordId, collectionId: payload.collectionId });
+    const targetBase = getUniquePath(buildStructuredImportPath(targetLibrary, resolvedFormat, importGame));
     const extensions = getConfiguredGameExtensions(currentConfig);
     const archiveExtensions = getConfiguredExtractionExtensions(currentConfig);
     const sourceIsArchive = stat.isFile() && isArchiveFilePath(sourcePath, currentConfig);
@@ -2103,6 +2119,7 @@ ipcMain.handle("import-catalog-entry", async (event, payload = {}) => {
       recordId,
     );
 
+    const collectionWarning = await saveInstallCollection(recordId, payload.collectionId);
     notify(`Imported ${importGame.title}`, 100);
     const refreshedGame = await getGame(recordId, getAssetBasePath(), process.defaultApp, getMediaStorageMode()).catch(() => null);
     BrowserWindow.getAllWindows().forEach((win) => {
@@ -2141,6 +2158,7 @@ ipcMain.handle("import-catalog-entry", async (event, payload = {}) => {
       sourceArchiveDeleted,
       sourceArchiveDeleteError,
       mappings: { atlasId, f95Id, lcId, steamId },
+      collectionWarning,
     };
   } catch (err) {
     console.error("import-catalog-entry error:", err);
@@ -2232,6 +2250,7 @@ ipcMain.handle("import-local-game-version", async (event, payload = {}) => {
       version,
     };
 
+    const resolvedFormat = await resolveLibraryFolderStructure(destinationFormat, { recordId, collectionId: payload.collectionId });
     let targetBase;
     if (replaceExisting && replaceRow?.game_path) {
       // Replacing an existing version: place the new files in the SAME folder
@@ -2248,7 +2267,7 @@ ipcMain.handle("import-local-game-version", async (event, payload = {}) => {
       if (!targetLibrary || !fs.existsSync(targetLibrary)) {
         targetLibrary = path.join(dataDir, "games");
       }
-      targetBase = getUniquePath(buildStructuredImportPath(targetLibrary, destinationFormat, importGame));
+      targetBase = getUniquePath(buildStructuredImportPath(targetLibrary, resolvedFormat, importGame));
     }
     const extensions = getConfiguredGameExtensions(currentConfig);
     const archiveExtensions = getConfiguredExtractionExtensions(currentConfig);
@@ -2382,6 +2401,7 @@ ipcMain.handle("import-local-game-version", async (event, payload = {}) => {
       await upsertVersion({ version, folder: gamePath, execPath, selectedValue: relativeExec }, recordId);
     }
     importCommitted = true;
+    const collectionWarning = await saveInstallCollection(recordId, payload.collectionId);
 
     const refreshedGame = await getGame(recordId, getAssetBasePath(), process.defaultApp, getMediaStorageMode()).catch(() => null);
     BrowserWindow.getAllWindows().forEach((win) => {
@@ -2488,6 +2508,7 @@ ipcMain.handle("import-local-game-version", async (event, payload = {}) => {
       oldVersionDeleteError,
       sourceArchiveDeleted,
       sourceArchiveDeleteError,
+      collectionWarning,
       game: refreshedGame,
     };
   } catch (err) {
@@ -3181,6 +3202,7 @@ ipcMain.handle("import-games", async (event, params) => {
     forceReimport = false,
     moveFoldersToLibrary = false,
     libraryFormat,
+    collectionId = null,
     // Set only by an external-library import (F95Checker etc). Controls the two
     // opt-in mappings; the rest of the user state always comes across.
     externalLibraryOptions = {},
@@ -3330,6 +3352,8 @@ ipcMain.handle("import-games", async (event, params) => {
       });
 
       game.version = normalizeVersionName(game.version);
+      const layoutRecordId = game.existingRecordId || game.recordId || await findExistingRecordForImport(game);
+      const resolvedFormat = await resolveLibraryFolderStructure(destinationFormat, { recordId: layoutRecordId, collectionId });
       const steamImport = isSteamImportRow(game);
       const steamId = getSteamIdFromGame(game);
       const gogImport = isGogImportRow(game);
@@ -3356,7 +3380,7 @@ ipcMain.handle("import-games", async (event, params) => {
       if (moveFoldersToLibrary && targetLibrary && !game.isArchive && !steamImport && !gogImport && !game.externalState && !game.isScanRoot && game.folder) {
         let destinationPath = buildStructuredImportPath(
           targetLibrary,
-          destinationFormat,
+          resolvedFormat,
           game,
         );
         if (fs.existsSync(destinationPath)) {
@@ -3420,7 +3444,7 @@ ipcMain.handle("import-games", async (event, params) => {
 
         let extractPath = buildStructuredImportPath(
           targetLibrary,
-          destinationFormat,
+          resolvedFormat,
           game,
         );
         if (fs.existsSync(extractPath)) {
@@ -3760,6 +3784,8 @@ ipcMain.handle("import-games", async (event, params) => {
         savedVersionResult = await addVersion(versionGame, recordId);
       }
       const savedVersion = savedVersionResult?.version || game.version;
+      const collectionWarning = await saveInstallCollection(recordId, collectionId);
+      if (collectionWarning) console.warn(collectionWarning);
       if (!Number(game.folderSize || game.folder_size || 0) && gamePath) {
         deferredSizeJobs.push({
           recordId,
@@ -3943,6 +3969,7 @@ ipcMain.handle("import-games", async (event, params) => {
         steamId: steamId || game.steamId,
         gogId: gogId || game.gogId,
         version: savedVersion,
+        collectionWarning,
       });
       session.cleanupPaths = [];
 
@@ -4527,6 +4554,53 @@ ipcMain.handle(
 );
 
 
+// Preview uses the exact main-process layout and collision rules, without
+// creating a record or changing collection membership before installation.
+ipcMain.handle("preview-library-path", async (event, payload = {}) => {
+  try {
+    const currentConfig = ctx.appConfig || appConfig || {};
+    const root = String(currentConfig?.Library?.gameFolder || "").trim();
+    if (!root) return { success: false, error: "No game folder is set." };
+    let recordId = toLocalRecordId(payload.recordId);
+    let game = payload.game || {};
+    let suggestedVersion = game.version;
+    if (payload.downloadId != null) {
+      const item = await require("../db/downloads").getDownload(payload.downloadId);
+      if (!item) return { success: false, error: "Download not found" };
+      recordId = toLocalRecordId(item.recordId);
+      suggestedVersion = item.version;
+      if (!recordId) {
+        const entry = await getCatalogEntryByRef(toCatalogRef(item.catalogRef));
+        if (!entry) return { success: false, error: "Catalog entry not found" };
+        game = entry;
+        recordId = (await resolveCatalogRecord(buildCatalogRecordDeps(), entry)).recordId;
+      }
+    } else if (!recordId) {
+      // Catalog imports use their displayed metadata but inherit existing membership.
+      recordId = (await resolveCatalogRecord(buildCatalogRecordDeps(), game)).recordId;
+    }
+    if (recordId && (payload.downloadId != null || toLocalRecordId(payload.recordId))) {
+      game = await getGame(recordId, getAssetBasePath(), process.defaultApp, getMediaStorageMode());
+      if (!game) return { success: false, error: "Game not found" };
+    }
+    const version = normalizeVersionName(payload.version || suggestedVersion || game.version);
+    const format = await resolveLibraryFolderStructure(payload.format || currentConfig?.Library?.libraryFolderStructure || buildDefaultConfig().Library.libraryFolderStructure, { recordId, collectionId: payload.collectionId });
+    if (recordId && payload.replaceVersionId != null) {
+      const previous = await dbGet(dbModule.db, `SELECT game_path FROM versions WHERE rowid = ? AND record_id = ?`, [toPositiveInteger(payload.replaceVersionId), recordId]);
+      if (!previous?.game_path) return { success: false, error: "Replacement version not found" };
+      return { success: true, path: getUniquePath(path.join(path.dirname(path.resolve(previous.game_path)), sanitizePathSegment(version))) };
+    }
+    const destination = buildStructuredImportPath(root, format, {
+      ...game, f95Id: game.f95Id || game.f95_id,
+      creator: game.creator || game.developer || game.steam_developer,
+      title: game.title || game.name, version,
+    });
+    return { success: true, path: getUniquePath(destination) };
+  } catch (error) {
+    return { success: false, error: error.message || String(error) };
+  }
+});
+
 // ── Install a completed download ────────────────────────────────────────────
 //
 // Lives here rather than in the download manager because extraction needs the
@@ -4548,7 +4622,7 @@ ipcMain.handle(
 // silent backlog that starts minutes later with no indication it is waiting.
 let installInProgress = null;
 
-ipcMain.handle("downloads-install", async (event, { id, version, onComplete, keepArchive = false, replaceVersionId = null } = {}) => {
+ipcMain.handle("downloads-install", async (event, { id, version, onComplete, keepArchive = false, replaceVersionId = null, collectionId = null } = {}) => {
   const downloadsDb = require("../db/downloads");
   const downloadManager = require("../downloads/downloadManager");
 
@@ -4782,10 +4856,11 @@ ipcMain.handle("downloads-install", async (event, { id, version, onComplete, kee
     // Same layout as a normal import, so downloads and imports are
     // indistinguishable on disk.
     // console.log('[downloads-install] record:', JSON.stringify(record, null, 2));
+    const resolvedFormat = await resolveLibraryFolderStructure(currentConfig?.Library?.libraryFolderStructure, { recordId, collectionId });
     const targetBase = getUniquePath(
       buildStructuredImportPath(
         targetLibrary,
-        currentConfig?.Library?.libraryFolderStructure,
+        resolvedFormat,
         {
           f95Id: record.f95_id || record.f95Id || "",
           atlasId: record.atlas_id || record.atlasId || "",
@@ -4892,6 +4967,7 @@ ipcMain.handle("downloads-install", async (event, { id, version, onComplete, kee
     // It can also differ from what we asked for, since addVersion renames for
     // uniqueness - so this is the value everything downstream must use.
     const savedVersion = addResult?.version || finalVersion;
+    const collectionWarning = await saveInstallCollection(recordId, collectionId);
 
     // Replacing swaps the previously installed build out; keep-both leaves it
     // alone. Never fatal — the new version is already attached, and failing here
@@ -5071,6 +5147,7 @@ ipcMain.handle("downloads-install", async (event, { id, version, onComplete, kee
       attachedByTitle: promotion?.titleCollision === true,
       promotedTitle: promotion?.identity?.title || "",
       wishlistRemoved,
+      collectionWarning,
     };
   } catch (err) {
     console.error("downloads-install failed:", err);

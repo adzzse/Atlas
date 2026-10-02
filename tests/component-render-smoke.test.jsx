@@ -157,7 +157,7 @@ test('CollectionModal mounts in create and rename modes', () => {
   render(
     <CollectionModal open mode="rename" initialName="Old" onSubmit={() => {}} onCancel={() => {}} />,
   )
-  expect(screen.getByText('Rename Collection')).toBeTruthy()
+  expect(screen.getByText('Edit Collection')).toBeTruthy()
 })
 
 test('GameTree mounts grouped and ungrouped', () => {

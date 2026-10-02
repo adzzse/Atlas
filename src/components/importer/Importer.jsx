@@ -93,6 +93,7 @@ const Importer = () => {
   const [autoSelectLatestReplaceVersion, setAutoSelectLatestReplaceVersion] = useState(false)
   const autoSelectLatestReplaceVersionRef = useRef(false)
   const [libraryFormat, setLibraryFormat] = useState(defaultSourceFolderStructure)
+  const [collectionId, setCollectionId] = useState(null)
   const [askingForLibraryFolder, setAskingForLibraryFolder] = useState(false)
   const [importMode, setImportMode] = useState('games')
   // Which external tool this window was opened for, and the two opt-in mappings
@@ -1857,6 +1858,7 @@ const Importer = () => {
       gameExt: gameExt.split(',').map((e) => e.trim()),
       forceReimport,
       libraryFormat,
+      collectionId,
       // Only set for an external-library import; ignored otherwise.
       ...(externalLibraryOptions
         ? {
@@ -1961,6 +1963,7 @@ const Importer = () => {
               autoSelectLatestReplaceVersion={autoSelectLatestReplaceVersion}
               defaultLibraryPath={defaultLibraryPath} askingForLibraryFolder={askingForLibraryFolder}
               libraryFormat={libraryFormat} setLibraryFormat={handleLibraryFormatChange}
+              collectionId={collectionId} setCollectionId={setCollectionId}
               onSelectFolder={selectFolder} onPickScanFolder={pickScanFolder} setFolder={setFolder} saveImporterDefaults={saveImporterDefaults} onStartScan={startScan}
               onOpenHelp={openImporterHelp}
               livePreview={livePreview}

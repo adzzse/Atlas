@@ -12,12 +12,13 @@ export function buildCollectionContextMenu(collection) {
   if (!collection) return []
   return [
     {
-      label: 'Rename',
+      label: 'Edit Collection',
       data: {
         action: 'collectionRenameRequested',
         collectionId: collection.id,
         name: collection.name,
         color: collection.color,
+        groupByCreator: collection.groupByCreator === true,
       },
     },
     {

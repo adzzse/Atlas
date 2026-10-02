@@ -164,6 +164,7 @@ async function handleContextAction(data, sender, ctx) {
         collectionId: data.collectionId,
         name: data.name,
         color: data.color,
+        groupByCreator: data.groupByCreator === true,
       });
       break;
     }

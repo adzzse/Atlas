@@ -149,6 +149,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   resolveImportMatches: (games) =>
     ipcRenderer.invoke("resolve-import-matches", games),
   importGames: (params) => ipcRenderer.invoke("import-games", params),
+  // Preview never creates directories or records; all path rules remain in main.
+  previewLibraryPath: (params) => ipcRenderer.invoke("preview-library-path", params),
   scanRenpySaves: (params) => ipcRenderer.invoke("scan-renpy-saves", params),
   selectRenpySaveDirectory: () =>
     ipcRenderer.invoke("select-renpy-save-directory"),

@@ -15,6 +15,7 @@ export default function CollectionModal({
   mode = 'create',
   initialName = '',
   initialColor = SWATCHES[0],
+  initialGroupByCreator = false,
   busy = false,
   error = '',
   onSubmit,
@@ -22,21 +23,23 @@ export default function CollectionModal({
 }) {
   const [name, setName] = useState(initialName)
   const [color, setColor] = useState(initialColor)
+  const [groupByCreator, setGroupByCreator] = useState(initialGroupByCreator)
   const inputRef = useRef(null)
 
   useEffect(() => {
     if (!open) return
     setName(initialName)
     setColor(initialColor || SWATCHES[0])
+    setGroupByCreator(initialGroupByCreator)
     // Focus after paint so the field is ready to type into immediately.
     const id = requestAnimationFrame(() => inputRef.current?.focus())
     return () => cancelAnimationFrame(id)
-  }, [open, initialName, initialColor])
+  }, [open, initialName, initialColor, initialGroupByCreator])
 
   if (!open) return null
 
   const canSubmit = name.trim().length > 0 && !busy
-  const submit = () => { if (canSubmit) onSubmit?.({ name: name.trim(), color }) }
+  const submit = () => { if (canSubmit) onSubmit?.({ name: name.trim(), color, groupByCreator }) }
 
   return (
     <div
@@ -48,7 +51,7 @@ export default function CollectionModal({
         onClick={(event) => event.stopPropagation()}
       >
         <h3 className="mb-3 text-sm font-semibold text-text">
-          {mode === 'rename' ? 'Rename Collection' : 'Create a New Collection'}
+          {mode === 'rename' ? 'Edit Collection' : 'Create a New Collection'}
         </h3>
 
         <label className="mb-1 block text-xs text-muted" htmlFor="collection-name">
@@ -89,6 +92,14 @@ export default function CollectionModal({
           </div>
         </div>
 
+        <label className="mt-3 flex items-center gap-2 text-xs text-text">
+          <input type="checkbox" checked={groupByCreator} onChange={(event) => setGroupByCreator(event.target.checked)} />
+          Group games by creator
+        </label>
+        <p className="mt-1 text-xs text-muted">
+          Future installs use Creator / Title / Version. Existing files stay where they are.
+        </p>
+
         {error && <p className="mt-3 text-xs text-danger">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
@@ -105,7 +116,7 @@ export default function CollectionModal({
             disabled={!canSubmit}
             className="rounded-buttonTheme bg-accent px-3 py-1.5 text-sm text-white hover:bg-accentHover disabled:opacity-50"
           >
-            {busy ? 'Saving…' : mode === 'rename' ? 'Rename' : 'Create'}
+            {busy ? 'Saving…' : mode === 'rename' ? 'Save' : 'Create'}
           </button>
         </div>
       </div>

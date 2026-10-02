@@ -1,3 +1,4 @@
+import LibraryDestination from '../library/LibraryDestination.jsx'
 import { useState, useEffect, useRef } from 'react'
 import { useTagState } from '../../hooks/useTagState.js'
 import WindowTitleBar from '../ui/WindowTitleBar.jsx'
@@ -681,13 +682,15 @@ const GameDetailWindow = () => {
       const result = await window.electronAPI.importLocalGameVersion?.({
         recordId: game.record_id,
         sourcePath: addVersionDraft.sourcePath,
+        collectionId: addVersionDraft.collectionId ?? null,
         version,
         replaceExisting: false,
       })
       if (!result?.success) throw new Error(result?.error || 'Import failed')
       const refreshedGame = await window.electronAPI.getGame(game.record_id)
       if (refreshedGame) refreshFromGame(refreshedGame)
-      setAddVersionDraft(null)
+      if (result.collectionWarning) setAddVersionError(result.collectionWarning)
+      else setAddVersionDraft(null)
     } catch (err) {
       console.error('Failed to add version:', err)
       setAddVersionError(err.message || 'Import failed')
@@ -1149,6 +1152,11 @@ const GameDetailWindow = () => {
                 className="w-full bg-primary border border-border p-2"
               />
             </label>
+            <LibraryDestination
+              game={game} recordId={game.record_id} version={addVersionDraft.version}
+              collectionId={addVersionDraft.collectionId ?? null}
+              onCollectionChange={(collectionId) => setAddVersionDraft((current) => ({ ...current, collectionId }))}
+            />
             {addVersionError && <div className="text-danger text-sm mt-2">{addVersionError}</div>}
             <div className="flex justify-end gap-2 mt-4">
               <button

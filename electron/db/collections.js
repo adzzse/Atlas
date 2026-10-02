@@ -93,6 +93,8 @@ const COLLECTIONS_DDL = [
   // Existing databases predate the visibility flag. initializeDatabase ignores
   // duplicate-column errors, so the same ordered list covers old and fresh DBs.
   `ALTER TABLE collections ADD COLUMN hide_from_library INTEGER NOT NULL DEFAULT 0;`,
+  // Opt-in only: ordinary collections must keep the user's global layout.
+  `ALTER TABLE collections ADD COLUMN group_by_creator INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 const COLLECTIONS_INDEXES = [
@@ -117,6 +119,7 @@ async function getCollections() {
       c.name,
       c.color,
       c.hide_from_library,
+      c.group_by_creator,
       c.sort_order,
       c.created_at,
       c.updated_at,
@@ -131,6 +134,7 @@ async function getCollections() {
     name: row.name,
     color: row.color || null,
     hideFromLibrary: row.hide_from_library === 1,
+    groupByCreator: row.group_by_creator === 1,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -187,7 +191,9 @@ async function getCollectionArtRecords(limit = 8) {
   return byCollection
 }
 
-async function createCollection({ name, color = null } = {}) {
+// Store the opt-in on the collection so future members inherit its layout.
+async function createCollection({ name, color = null, groupByCreator = false } = {}) {
+  if (typeof groupByCreator !== 'boolean') return { success: false, error: 'Invalid creator grouping' }
   const cleanName = normalizeName(name)
   if (!cleanName) return { success: false, error: 'A collection name is required' }
 
@@ -205,9 +211,9 @@ async function createCollection({ name, color = null } = {}) {
 
   try {
     const result = await run(
-      `INSERT INTO collections (name, color, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [cleanName, resolvedColor, sortOrder, timestamp, timestamp],
+      `INSERT INTO collections (name, color, sort_order, created_at, updated_at, group_by_creator)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [cleanName, resolvedColor, sortOrder, timestamp, timestamp, groupByCreator ? 1 : 0],
     )
     return { success: true, id: result.lastID, name: cleanName, color: resolvedColor }
   } catch (err) {
@@ -215,7 +221,11 @@ async function createCollection({ name, color = null } = {}) {
   }
 }
 
-async function renameCollection(collectionId, name) {
+// Older callers only rename; an omitted option must preserve the saved layout.
+async function renameCollection(collectionId, name, { groupByCreator } = {}) {
+  if (groupByCreator !== undefined && typeof groupByCreator !== 'boolean') {
+    return { success: false, error: 'Invalid creator grouping' }
+  }
   const id = normalizeId(collectionId)
   const cleanName = normalizeName(name)
   if (!id) return { success: false, error: 'Invalid collection' }
@@ -228,8 +238,8 @@ async function renameCollection(collectionId, name) {
   if (clash) return { success: false, error: `A collection named "${cleanName}" already exists` }
 
   const result = await run(
-    `UPDATE collections SET name = ?, updated_at = ? WHERE id = ?`,
-    [cleanName, now(), id],
+    `UPDATE collections SET name = ?, group_by_creator = COALESCE(?, group_by_creator), updated_at = ? WHERE id = ?`,
+    [cleanName, groupByCreator === undefined ? null : groupByCreator ? 1 : 0, now(), id],
   )
   if (!result.changes) return { success: false, error: 'Collection not found' }
   return { success: true, id, name: cleanName }
@@ -316,6 +326,24 @@ async function getCollectionsForGame(recordId) {
   return rows.map((row) => row.collection_id)
 }
 
+// A pending selection participates before a new game has a record. Reading
+// membership here keeps download, local and batch imports on the same rule.
+async function resolveLibraryFolderStructure(format, { recordId, collectionId } = {}) {
+  const selected = normalizeId(collectionId)
+  if (collectionId != null && !selected) throw new Error('Invalid collection')
+  if (selected && !(await get(`SELECT id FROM collections WHERE id = ?`, [selected]))) {
+    throw new Error('Collection not found')
+  }
+  const grouped = await get(
+    `SELECT c.id FROM collections c
+       LEFT JOIN collection_games cg ON cg.collection_id = c.id
+      WHERE c.group_by_creator = 1 AND (c.id = ? OR cg.record_id = ?)
+      LIMIT 1`,
+    [selected, normalizeId(recordId)],
+  )
+  return grouped ? '{creator}/{title}/{version}' : format
+}
+
 // Persisted display order for the tile screen.
 async function reorderCollections(orderedIds = []) {
   const ids = (Array.isArray(orderedIds) ? orderedIds : [])
@@ -343,6 +371,7 @@ module.exports = {
   getCollectionMemberships,
   getCollectionArtRecords,
   getCollectionsForGame,
+  resolveLibraryFolderStructure,
   createCollection,
   renameCollection,
   setCollectionColor,

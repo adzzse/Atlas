@@ -1,4 +1,5 @@
 import { buildFolderRegex } from '../folderRegex.js'
+import LibraryDestination from '../../library/LibraryDestination.jsx'
 import EditablePathField from '../../ui/EditablePathField.jsx'
 
 // Checkbox + label row used throughout the settings form. Defined at module
@@ -18,7 +19,7 @@ export default function SettingsStep({
   downloadBannerImages, downloadPreviewImages, previewLimit,
   moveFoldersToLibrary, deleteSourceArchiveAfterImport, autoSelectLatestReplaceVersion,
   defaultLibraryPath, askingForLibraryFolder,
-  libraryFormat, setLibraryFormat,
+  libraryFormat, setLibraryFormat, collectionId, setCollectionId,
   onSelectFolder, onPickScanFolder, setFolder, saveImporterDefaults, onStartScan, onOpenHelp, livePreview,
   setCustomFormat, setUseUnstructured, setGameExt, setArchiveExt,
   setIncludeArchives, setUseCustomRegex, setCustomRegex,
@@ -230,6 +231,16 @@ export default function SettingsStep({
             </div>
           )}
         </div>
+        {showLibraryStructure && setCollectionId && (
+          <div className="mt-3">
+            <LibraryDestination
+              game={livePreview?.fields || { title: 'Game Title', creator: 'Creator' }}
+              version={livePreview?.fields?.version || 'Version'}
+              format={libraryFormat} collectionId={collectionId} onCollectionChange={setCollectionId}
+              label="Example destination"
+            />
+          </div>
+        )}
         <div className="text-sm mt-3">
           {defaultLibraryPath ? (
             <span className="text-success">Library destination: <strong>{defaultLibraryPath}</strong></span>

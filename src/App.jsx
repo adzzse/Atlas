@@ -774,14 +774,14 @@ const App = () => {
     setCollectionModalBusy(false)
   }, [])
 
-  const submitCollectionModal = useCallback(async ({ name, color }) => {
+  const submitCollectionModal = useCallback(async ({ name, color, groupByCreator }) => {
     if (!collectionModal) return
     setCollectionModalBusy(true)
     setCollectionModalError('')
     try {
       if (collectionModal.mode === 'rename') {
         const result = await window.electronAPI.renameCollection({
-          collectionId: collectionModal.collectionId, name,
+          collectionId: collectionModal.collectionId, name, groupByCreator,
         })
         if (!result?.success) {
           setCollectionModalError(result?.error || 'Failed to rename collection')
@@ -793,7 +793,7 @@ const App = () => {
           })
         }
       } else {
-        const result = await window.electronAPI.createCollection({ name, color })
+        const result = await window.electronAPI.createCollection({ name, color, groupByCreator })
         if (!result?.success) {
           setCollectionModalError(result?.error || 'Failed to create collection')
           return
@@ -1877,6 +1877,7 @@ const App = () => {
         collectionId: payload?.collectionId,
         name: payload?.name || '',
         color: payload?.color || null,
+        groupByCreator: payload?.groupByCreator === true,
       })
     })
     const removeRateTitleListener = window.electronAPI.onRateTitleRequested?.((payload) => {
@@ -2701,6 +2702,7 @@ const App = () => {
         mode={collectionModal?.mode || 'create'}
         initialName={collectionModal?.name || ''}
         initialColor={collectionModal?.color || undefined}
+        initialGroupByCreator={collectionModal?.groupByCreator === true}
         busy={collectionModalBusy}
         error={collectionModalError}
         onSubmit={submitCollectionModal}

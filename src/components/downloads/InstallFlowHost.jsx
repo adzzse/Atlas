@@ -259,12 +259,13 @@ const InstallFlowHost = forwardRef(function InstallFlowHost(
                 + `"${result.promotedTitle || pending?.title || 'this game'}", which matched by `
                 + `name only — no store or thread id linked them. If that is a different `
                 + `game, move the version from its page.`
-                + (result.replaceMessage ? ` ${result.replaceMessage}` : ''),
+                + (result.replaceMessage ? ` ${result.replaceMessage}` : '')
+                + (result.collectionWarning ? ` ${result.collectionWarning}` : ''),
             })
             return
           }
-          if (result?.success && result.replaceMessage) {
-            setInstallNotice({ title: result.version || '', message: result.replaceMessage })
+          if (result?.success && (result.replaceMessage || result.collectionWarning)) {
+            setInstallNotice({ title: result.version || '', message: [result.replaceMessage, result.collectionWarning].filter(Boolean).join(' ') })
           }
         }}
       />

@@ -1,3 +1,4 @@
+import LibraryDestination from '../library/LibraryDestination.jsx'
 import { useState, useEffect, useRef } from 'react'
 import RatingModal from './RatingModal.jsx'
 import {
@@ -171,6 +172,9 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
   const [catalogDeleteSourceArchive, setCatalogDeleteSourceArchive] = useState(false)
   const [localImportPath, setLocalImportPath] = useState('')
   const [localImportVersion, setLocalImportVersion] = useState('')
+  const [importCollectionId, setImportCollectionId] = useState(null)
+  // A collection choice belongs to this import, not the next opened game.
+  useEffect(() => { setImportCollectionId(null) }, [game.record_id, game.catalog_ref])
   const [localImportBusy, setLocalImportBusy] = useState(false)
   const [localImportStatus, setLocalImportStatus] = useState('')
   const [localImportError, setLocalImportError] = useState('')
@@ -928,6 +932,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
         version,
         replaceExisting: localReplaceExisting,
         replaceVersionId: localReplaceExisting ? localReplaceVersionId : null,
+        collectionId: importCollectionId,
         deleteSourceArchiveAfterImport: localDeleteSourceArchive && localImportIsArchive,
       })
       if (!result?.success) throw new Error(result?.error || 'Import failed')
@@ -936,7 +941,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       const messages = [`${result.replaced ? 'Replaced' : 'Imported'} ${result.version || version}.`]
       if (result.oldVersionDeleted) messages.push('Old version files deleted.')
       if (result.sourceArchiveDeleted) messages.push('Source archive deleted.')
-      const warnings = [result.oldVersionDeleteError, result.sourceArchiveDeleteError].filter(Boolean)
+      const warnings = [result.oldVersionDeleteError, result.sourceArchiveDeleteError, result.collectionWarning].filter(Boolean)
       setLocalImportStatus([...messages, ...warnings.map((warning) => `Warning: ${warning}`)].join(' '))
       if (warnings.length === 0) setShowLocalImportPanel(false)
       onRefresh?.(game.record_id)
@@ -996,6 +1001,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
         sourcePath,
         version,
         conflictMode: options.conflictMode || 'check',
+        collectionId: importCollectionId,
         deleteSourceArchiveAfterImport: catalogDeleteSourceArchive && isArchiveSourcePath(sourcePath, localArchiveExtensions),
       })
       if (result?.conflict) {
@@ -1012,8 +1018,9 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
         `Imported ${result.version || version} into the Library.`,
         result.sourceArchiveDeleted ? 'Source archive deleted.' : '',
         result.sourceArchiveDeleteError ? `Warning: ${result.sourceArchiveDeleteError}` : '',
+        result.collectionWarning || '',
       ].filter(Boolean).join(' '))
-      setShowLocalImportPanel(false)
+      if (!result.collectionWarning) setShowLocalImportPanel(false)
       onRefresh?.(result.recordId)
     } catch (err) {
       setCatalogImportStatus('')
@@ -1391,6 +1398,12 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
               Choose
             </button>
           </div>
+          <LibraryDestination
+            game={game} recordId={importPanelMode === 'local' ? game.record_id : null}
+            version={importPanelMode === 'catalog' ? catalogImportVersion : localImportVersion}
+            collectionId={importCollectionId} onCollectionChange={setImportCollectionId}
+            replaceVersionId={importPanelMode === 'local' && localReplaceExisting ? localReplaceVersionId || null : null}
+          />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
             {importPanelMode === 'local' && (
               <>
