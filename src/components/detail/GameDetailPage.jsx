@@ -160,6 +160,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
   // so a click on a folder that had been moved did nothing at all.
   const [folderError, setFolderError] = useState('')
   const [launchState, setLaunchState] = useState(LAUNCH_STATE.IDLE)
+  const [launchError, setLaunchError] = useState('')
   const [lightboxIndex, setLightboxIndex] = useState(null)
   const [bannerMask, setBannerMask] = useState({ image: 'none', composite: null })
   const [catalogImportPath, setCatalogImportPath] = useState('')
@@ -785,8 +786,10 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
     if (!canLaunch || launchState !== LAUNCH_STATE.IDLE) return
     closedDuringLaunchRef.current = false
     setLaunchState(LAUNCH_STATE.LAUNCHING)
+    setLaunchError('')
     try {
-      await window.electronAPI.launchGame({ recordId: game.record_id, version: actionVersion.version })
+      const result = await window.electronAPI.launchGame({ recordId: game.record_id, version: actionVersion.version })
+      if (result?.success === false) throw new Error(result.error || 'The game could not be launched.')
       // If the process already exited (crash, instant-close launcher stub), the
       // main process has told us so — don't claim RUNNING after the fact.
       if (closedDuringLaunchRef.current) return
@@ -794,6 +797,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       setLaunchState(LAUNCH_STATE.RUNNING)
     } catch (err) {
       console.error('Launch failed:', err)
+      setLaunchError(err?.message || 'The game could not be launched.')
       setLaunchState(LAUNCH_STATE.IDLE)
       isRunningRef.current = false
     }
@@ -1801,6 +1805,15 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
         error={personalRatingsError}
         onSave={savePersonalRatings}
         onCancel={() => { if (!personalRatingsBusy) setRatingModalOpen(false) }}
+      />
+
+      <ConfirmModal
+        open={Boolean(launchError)}
+        alert
+        title="Could not launch game"
+        body={launchError}
+        confirmLabel="OK"
+        onCancel={() => setLaunchError('')}
       />
 
       <ConfirmModal

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- Windows games that require administrator access now fall back to the Windows UAC prompt when direct launch is denied. Launch errors are shown on the detail page instead of silently reporting success.
+
 ### Changed
 - Downloads: clicking a cover now opens the game entry inside Atlas Library/ Catalog, and clicking the build label (e.g. Full Archive) opens the source thread in your browser.
 - (Dev-Only) DevTools no longer auto-opens in dev mode unless explicitly enabled in config.

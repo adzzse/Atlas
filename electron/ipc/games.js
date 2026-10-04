@@ -5,6 +5,7 @@ const { BROWSE_MODE_ENABLED } = require('../features')
 const path = require('path')
 const fs = require('fs')
 const cp = require('child_process')
+const { once } = require('events')
 const { recordGameLaunchStarted, recordGamePlaytime, getLibraryStats } = require('../db/games')
 // Required directly rather than pulled from the ctx bundle: that bundle
 // re-exports a curated list, so adding exports to db/games.js alone left these
@@ -167,10 +168,14 @@ async function spawnTrackedGame(command, args, { recordId, version, cwd, shell =
       env: sanitizeChildEnv(process.env),
     })
     trackChildPlaySession(child, session, recordId)
+    // spawn reports failures asynchronously. Await its outcome so launch-game
+    // cannot report success before Windows rejects an elevation-required EXE.
+    await once(child, 'spawn')
     child.unref()
     return child
   } catch (err) {
-    // Spawn threw synchronously, so no exit will ever arrive to release it.
+    // Also covers synchronous spawn errors; release is safe if the child's
+    // error listener already released the session.
     session?.release?.()
     throw err
   }
@@ -258,12 +263,22 @@ async function launchGame({ execPath, gamePath, extension, recordId, version, so
         shell: false,
       })
     } else {
-      await spawnTrackedGame(execPath, [], {
-        recordId,
-        version,
-        cwd: path.dirname(execPath),
-        shell: false,
-      })
+      try {
+        await spawnTrackedGame(execPath, [], {
+          recordId,
+          version,
+          cwd: path.dirname(execPath),
+          shell: false,
+        })
+      } catch (err) {
+        if (process.platform !== 'win32' || err.code !== 'EACCES') throw err
+        // CreateProcess cannot show UAC for requireAdministrator executables
+        // and Node maps that refusal to EACCES. Let the Windows shell request
+        // consent for this EXE; normal launches retain child-process tracking.
+        const openResult = await shell.openPath(execPath)
+        if (openResult) throw new Error(openResult)
+        await startPlaySession(recordId, version, false)
+      }
     }
   } else {
     const openResult = await shell.openPath(execPath)
