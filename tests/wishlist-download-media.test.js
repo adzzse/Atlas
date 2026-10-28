@@ -46,6 +46,8 @@ describe('wishlist download media', () => {
     const media = fs.readFileSync(path.join(__dirname, '..', 'electron', 'ipc', 'media.js'), 'utf8')
 
     expect(importer).toContain('refreshGameMedia: ctx.refreshGameMedia')
+    // Promoted installs already use the shared repair; the upstream fill is for existing records.
+    expect(importer).toContain('if (!promotion && getMediaStorageMode() === "download")')
     expect(media).toContain('ctx.refreshGameMedia = refreshOneGame')
   })
 })

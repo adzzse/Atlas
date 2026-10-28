@@ -13,10 +13,24 @@ describe('downloaded banner preference', () => {
         banner_source: 'download',
         f95_banner: remoteBanner,
       },
-      { sourceOrder: ['f95'], mediaStorageMode: 'download' },
+      { sourceOrder: ['f95'], mediaStorageMode: 'download', bannerFileExists: true },
     )
 
     expect(game.banner_url).toBe(localBanner)
     expect(game.banner_candidates).toEqual([localBanner, remoteBanner])
+  })
+
+  it('uses remote media when the downloaded banner no longer exists', () => {
+    const remoteBanner = 'https://attachments.f95zone.to/agent17/banner.jpg'
+    const game = applyMediaSources(
+      {
+        banner_url: 'C:/Atlas/data/images/1/missing.webp',
+        banner_source: 'download',
+        f95_banner: remoteBanner,
+      },
+      { sourceOrder: ['f95'], mediaStorageMode: 'download', bannerFileExists: false },
+    )
+
+    expect(game.banner_url).toBe(remoteBanner)
   })
 })

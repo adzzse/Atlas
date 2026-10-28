@@ -312,11 +312,26 @@ function registerGamesHandlers(ctx) {
 
   // Attach the configurable media-source fields (banner/hero/logo + steam id)
   // to a game (or array of games) right before it leaves for the renderer.
-  const withMedia = (data) => {
+  // The caller-only file probe lets a downloaded banner pin its file (see
+  // applyMediaSources); here because db/mediaSources is deliberately fs-free.
+  const bannerFileExists = async (game) => {
+    const url = String(game?.banner_url || '')
+    // Remote banner_url (no local rows to pin); only real paths get probed.
+    if (!url || /^https?:\/\//i.test(url)) return false
+    try {
+      await fs.promises.access(url.replace('file://', ''))
+      return true
+    } catch {
+      return false
+    }
+  }
+  const withMedia = async (data) => {
     const sourceOrder = getMetadataSourceOrder()
+    const list = Array.isArray(data) ? data : [data]
+    const exists = await Promise.all(list.map(bannerFileExists))
     const mediaStorageMode = getMediaStorageMode()
-    if (Array.isArray(data)) return data.map((g) => applyMediaSources(g, { sourceOrder, mediaStorageMode }))
-    return applyMediaSources(data, { sourceOrder, mediaStorageMode })
+    if (Array.isArray(data)) return data.map((g, i) => applyMediaSources(g, { sourceOrder, mediaStorageMode, bannerFileExists: exists[i] }))
+    return applyMediaSources(data, { sourceOrder, mediaStorageMode, bannerFileExists: exists[0] })
   }
 
   ipcMain.handle('add-game', async (event, game) => {
@@ -398,7 +413,7 @@ function registerGamesHandlers(ctx) {
 
   ipcMain.handle('get-game', async (event, recordId) => {
     const game = await getGame(recordId, getAssetBasePath(), process.defaultApp, getMediaStorageMode())
-    return withMedia(game)
+    return await withMedia(game)
   })
 
   ipcMain.handle('request-game-data', async (event) => {
@@ -410,7 +425,7 @@ function registerGamesHandlers(ctx) {
     }
     const game = await getGame(recordId, getAssetBasePath(), process.defaultApp, getMediaStorageMode())
     if (event.sender.isDestroyed()) return null
-    return withMedia(game)
+    return await withMedia(game)
   })
 
   ipcMain.handle('get-games', async (event, args = {}) => {
@@ -426,7 +441,7 @@ function registerGamesHandlers(ctx) {
         mediaStorageMode: getMediaStorageMode(),
       },
     )
-    return withMedia(games)
+    return await withMedia(games)
   })
 
   ipcMain.handle('get-catalog-games', async (event, args = {}) => {
@@ -452,8 +467,8 @@ function registerGamesHandlers(ctx) {
         mediaStorageMode: getMediaStorageMode(),
       },
     )
-    if (Array.isArray(result)) return withMedia(result)
-    return { ...result, games: withMedia(result.games || []) }
+    if (Array.isArray(result)) return await withMedia(result)
+    return { ...result, games: await withMedia(result.games || []) }
   })
 
   // Count-only variant of get-catalog-games — runs just the COUNT query,
@@ -498,7 +513,7 @@ function registerGamesHandlers(ctx) {
       )
       const game = result?.games?.[0] || null
       if (!game) return { success: false, error: 'Catalog entry not found' }
-      return { success: true, game: withMedia(game) }
+      return { success: true, game: await withMedia(game) }
     } catch (err) {
       return { success: false, error: err?.message || String(err) }
     }
@@ -521,7 +536,7 @@ function registerGamesHandlers(ctx) {
   })
 
   ipcMain.handle('wishlist-list', async () => {
-    return withMedia(await getWishlistEntries())
+    return await withMedia(await getWishlistEntries())
   })
 
   ipcMain.handle('wishlist-identities', async () => {
@@ -569,7 +584,7 @@ function registerGamesHandlers(ctx) {
           processed++
           if (!sender.isDestroyed()) {
             sender.send('library-validation-progress', { processed, total: recordIds.length })
-            if (game) sender.send('game-updated', withMedia(game))
+            if (game) sender.send('game-updated', await withMedia(game))
           }
           if (processed % 25 === 0) await new Promise(resolve => setTimeout(resolve, 0))
         }

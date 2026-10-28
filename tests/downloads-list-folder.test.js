@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import Module from 'node:module'
 import path from 'node:path'
 
@@ -15,7 +15,7 @@ process.env.ATLAS_GOFILE_PAUSE_MS = '0'
 
 const handlers = new Map()
 const electronStub = {
-  ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) },
+  ipcMain: { handle: vi.fn((channel, fn) => handlers.set(channel, fn)) },
   shell: {},
   BrowserWindow: { getAllWindows: () => [] },
   app: { getPath: () => 'C:\\tmp\\atlas-test' },
@@ -72,6 +72,12 @@ function stubFetch(routes) {
 }
 
 describe('downloads-list-folder', () => {
+  it('registers each IPC channel once after merging Nightly', () => {
+    // Electron rejects duplicates instead of overwriting them as the test Map does.
+    const channels = electronStub.ipcMain.handle.mock.calls.map(([channel]) => channel)
+    expect(channels).toEqual([...new Set(channels)])
+  })
+
   it('is registered on the real ipc module', () => {
     expect(handlers.has('downloads-list-folder')).toBe(true)
   })

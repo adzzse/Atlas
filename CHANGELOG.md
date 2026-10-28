@@ -3,9 +3,21 @@
 ## Unreleased
 
 ### Fixed
+- Fork sync keeps downloaded-banner fallbacks alongside Nightly file checks and avoids duplicate media downloads after Wishlist installs.
 - Windows games that require administrator access now fall back to the Windows UAC prompt when direct launch is denied. Launch errors are shown on the detail page instead of silently reporting success.
 
 ### Changed
+- Update dialog: a game linked to only one site now shows its source tab, which carries the fetched version
+- Cloudflare Handling (part 4): the download resolve window no longer appears while the page is still making progress. It stays hidden through a Cloudflare challenge that clears on its own and through the /dl/ countdown, and appears only after about 4 seconds with no progress. The hidden window is no longer throttled like a background tab, which could freeze F95's own scripts. A funding or social page opened from a shown window is no longer accepted as the resolved link.
+- Cloudflare Handling (part 3): LewdCorner thread links now open the real-browser window on a 403 or challenge page instead of failing outright, and a grant solved during account login now carries over to downloads when it is still valid
+- Restore LewdCorner's Plus member check to access eligible Plus titles for LewdCorner
+- Source fetch: the F95 and LewdCorner fallback windows now run in parallel when both sources hit a challenge
+  - Each tab also fetches its own version instead of using the single latest version as before
+  - LewdCorner parsing: add special handling for LC entries where a <b></b> wraps the entire Downloads section
+  - F95/LC parsing: add base + fixture handling for known templates
+- Update F95 parsing and link fetch due to F95 structure change
+- Cloudflare Handling (part 2): fix F95 dropped session cookies on the no-challenge fetch path
+- Cloudlfare Handling: Hotfix f95 cloudflare stricter change
 - Downloads: clicking a cover now opens the game entry inside Atlas Library/ Catalog, and clicking the build label (e.g. Full Archive) opens the source thread in your browser.
 - (Dev-Only) DevTools no longer auto-opens in dev mode unless explicitly enabled in config.
 - Removed the stale restart popup and hint on the Show debug console toggle — it applies immediately to all open windows.
@@ -17,6 +29,18 @@
 ### Added
 - Collections can opt into creator folders for future installs/imports. Install and import forms can select a collection and preview the destination; other games keep the configured library structure.
 - Collections can now hide their member games from the main Library through a right-click checkbox. Hidden members remain installed and still appear when any containing collection is opened.
+- Add a settings in Metadata section to clear web image cache to prevent image cached from transient 404 errors
+- Add debug log for CF / masked resolve handling on downloader popup & send to devtool
+- Add Esc keyboard handling for exit game entry page + input boxes to support (#130)
+- Game detail metadata is now clickable (#130)
+  - Tags, category, engine and status jump to that filtered search, while developer and language run a text search.
+  - Plain click follows the Click-to-search default mode in Settings > Interface (Browse mode or Library search); Shift-click jumps to the other mode.
+  - Jumped-to filter sections open themselves with the cursor in the section input; text jumps hand the cursor to the search box.
+  - Tag removal in game entry page is only allowed after entering edit mode (pencil icon)
+- Add version source (Steam, GOG, Itch) chips in the Edit Game Details Versions list for remote game installed (#345)
+- Add `Original Name` field in Edit Game Details section. Search now consider original_name in the rebuilt search index (#346)
+- Add Browser selection for external links opening under Settings -> Interface.
+- LewdCorner download support. The Update dialog now shows F95zone and LewdCorner tabs for games linked to both sites, each loading only when opened. LewdCorner links use a separate per-game cache and the same tier rule as Browse, and masked-link resolves now use the session that matches the link.
 - Added a Browse blacklist. A title can be blacklisted from its right-click menu or with the new Blacklist button next to Add to Wishlist on its detail page, and it is then hidden from Browse. Entries are stored in a new `blacklist_entries` table, so they survive a restart, and the new Settings > Blacklist section lists them with a Remove button to bring a title back. The exclusion is part of the shared catalog WHERE clause on both the index and the union query paths (`electron/db/blacklistSql.js`), so the result count and scrollbar stay correct instead of leaving gaps. Blacklisting a wishlisted title also removes it from the wishlist, and titles that are installed are never hidden.
 - Add Gofile support. One-file folders queue directly; multi-file folders show a picker. Settings shows free usage (1 TB / 30 days), no login needed. The site token salt is cached locally and re-fetched automatically when Gofile rotates it, so links keep working without updates; guests share one session and one 4s-paced retry per incident to stay inside the ~20 calls/min free budget, with a wait-and-retry message when throttled.
 - Importer and Library folder scheme now support `{atlasId}`, so installs can be matched back to AtlasDB on re-import / rebuild.
@@ -27,6 +51,14 @@
 - Added a "Download Version" entry to the split-button caret on the game detail page, beside "Manual Install". It opens the same downloads modal the UPDATE button does, listing every build and mirror the thread offers, so a different version can be fetched over one already installed. Previously an installed title with no pending update had no route to that modal at all: the primary button becomes PLAY once a version is installed, and the UPDATE button only renders when an update is flagged. The entry goes straight to the downloads modal rather than through the source picker, and is shown disabled with a reason for titles with no F95zone thread linked.
 
 ### Fixed
+- Fix: correct order of media served by banner previews - custom > downloaded > remote. Also add an async probe to avoid serving invalid image path for banner.
+- Fix nightly existing bugs:
+  - Tags/Category in Filter side bar now correctly show badge counter.  Engine/Status also have their counter logic fix to include exclusive.
+  - Double highlight issues on browse/library mode switching without clicking on Library / Browse button on the sidebar rail.
+- Fixed: installing a game in Download mode now downloads its images in the background once the install finishes, paced by the Delay after each media request setting with per-source rate-limit pauses like import and refresh. Add logic to preserve download image even if server url change. (#421)
+- Steam previews & assets fix:
+  - Fixed Steam-version previews rendering twice in download mode.
+  - Scope Steam previews / banner / trailers, logo into season.
 - Hotfixed: isolate Gofile folder-picker support from url resolve logic of other downloader sources
 - Catalog tag filtering now matches Library. Library already did exact-token filtering via `splitListText`/`normalizeTagText`/`includesTag` `src/hooks/useFilters.js`; Catalog used substring `LOWER(col) LIKE '%tag%'`. Fix copies those Library helpers into shared `src/utils/tagTokens.js` ↔ `electron/db/tagTokens.js` and adds a stored `tags_filter` column plus an indexed `catalog_index_tags` table (`catalog_key, tag` + `idx_catalog_index_tags_tag`). Browse now filters via `EXISTS (SELECT 1 FROM catalog_index_tags WHERE tag=?)` hitting the index instead of `LIKE '%,token,%'` with leading wildcard on `tags_filter` (full scan, a few seconds per tag click). `COALESCE`/`ESCAPE`/`REPLACE` remain only for the union fallback path when the index is not ready.
 - Fixed MEGA v1 test timeout — legacy key derivation is intentionally slow and needed a longer test timeout.
