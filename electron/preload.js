@@ -331,8 +331,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("set-selected-game-version", { recordId, versionId }),
   recalculateVersionSize: (params) =>
     ipcRenderer.invoke("recalculate-version-size", params),
+  // Seed from native state without letting a delayed reply replace a newer event.
   onWindowStateChanged: (callback) => {
-    ipcRenderer.on("window-state-changed", (event, state) => callback(state));
+    let stateReceived = false;
+    const listener = (event, state) => { stateReceived = true; callback(state); };
+    ipcRenderer.on("window-state-changed", listener);
+    ipcRenderer.invoke("get-window-state").then((state) => {
+      if (!stateReceived && (state === "maximized" || state === "normal") &&
+          ipcRenderer.listeners("window-state-changed").includes(listener)) callback(state);
+    }).catch(() => {});
+    return () => ipcRenderer.removeListener("window-state-changed", listener);
   },
   // Each subscriber owns its cleanup, so unmounting cannot remove another listener.
   onWindowVisibilityChanged: (callback) => {

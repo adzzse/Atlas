@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Window controls now target their requesting window, the extension's Show Atlas action resolves the live main window, and maximize/restore icons resync from native state after renderer reloads.
 - Restoring from tray now explicitly shows the window even when native restore already reports it visible, restoring renderer input, resize layout and caption controls.
 - Minimize to tray now defers hiding until native minimize dispatch finishes to avoid re-entering Windows window transitions; stale hides are skipped after restore or shutdown, and closed-window cleanup no longer accesses destroyed native contents.
 - Game Details now shows Last Updated from the game's source metadata alongside Release Date.

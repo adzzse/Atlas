@@ -2563,6 +2563,7 @@ app.whenReady().then(async () => {
     startExtensionServer({
       port: extConfig.rpcPort || 57096,
       getConfig: () => appConfig,
+      getMainWindow: () => mainWindow,
     })
   }
 

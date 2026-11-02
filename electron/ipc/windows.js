@@ -383,16 +383,25 @@ module.exports = function registerWindowsHandlers(ctx) {
     }
   }
 
-  ipcMain.handle('minimize-window', () => {
-    const win = BrowserWindow.getFocusedWindow()
-    if (win) win.minimize()
+  // Focus may move between the caption click and delivery of its IPC request.
+  ipcMain.handle('minimize-window', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && !win.isDestroyed()) win.minimize()
   })
 
-  ipcMain.handle('maximize-window', () => {
-    const win = BrowserWindow.getFocusedWindow()
-    if (!win) return
+  // Keep maximize/restore attached to the requesting window, like close-window.
+  ipcMain.handle('maximize-window', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return
     if (win.isMaximized()) win.unmaximize()
     else win.maximize()
+  })
+
+  // Reloaded or late-mounted renderers missed earlier native maximize events.
+  ipcMain.handle('get-window-state', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return null
+    return win.isMaximized() ? 'maximized' : 'normal'
   })
 
   ipcMain.handle('close-window', async (event) => {

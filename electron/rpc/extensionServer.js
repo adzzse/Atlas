@@ -71,6 +71,7 @@ const getBrowserWindow = () => electronModule?.BrowserWindow || null
 let server = null
 let activePort = 57096
 let getConfigFn = null
+let getMainWindowFn = null
 
 const THREAD_ID_PATTERNS = {
   f95: /(?:^|\/\/|\.)f95zone\.to\/threads\/(?:([^/?#]*)[.-])?(\d+)/i,
@@ -424,14 +425,15 @@ function handleRequest(req, res) {
     req.on('end', async () => {
       try {
         if (pathname === '/window/show' || pathname === '/api/window/show') {
-          const BW = getBrowserWindow()
-          const windows = BW ? BW.getAllWindows() : []
-          if (windows.length > 0) {
-            const mainWin = windows[0]
-            if (mainWin.isMinimized()) mainWin.restore()
-            mainWin.show()
-            mainWin.focus()
+          // Electron lists newer secondary windows first; resolve the live main window explicitly.
+          const mainWin = getMainWindowFn?.()
+          if (!mainWin || mainWin.isDestroyed()) {
+            sendJson(res, 503, { success: false, error: 'Atlas main window is not available' })
+            return
           }
+          if (mainWin.isMinimized()) mainWin.restore()
+          mainWin.show()
+          mainWin.focus()
           sendJson(res, 200, { success: true })
           return
         }
@@ -470,6 +472,7 @@ function handleRequest(req, res) {
 function startExtensionServer(options = {}) {
   const port = options.port || activePort
   getConfigFn = options.getConfig || null
+  getMainWindowFn = options.getMainWindow || null
 
   if (server) {
     stopExtensionServer()

@@ -311,6 +311,7 @@ function registerExtensionHandlers(ctx) {
       startExtensionServer({
         port,
         getConfig: () => ctx.getConfig(),
+        getMainWindow: () => ctx.mainWindow,
       })
       // Small delay for server to start listening
       await new Promise((resolve) => setTimeout(resolve, 50))
@@ -437,6 +438,7 @@ function registerExtensionHandlers(ctx) {
       startExtensionServer({
         port: extConfig.rpcPort || 57096,
         getConfig: () => ctx.getConfig(),
+        getMainWindow: () => ctx.mainWindow,
       })
     } else {
       stopExtensionServer()
