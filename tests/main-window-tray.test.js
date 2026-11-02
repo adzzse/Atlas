@@ -5,6 +5,10 @@ import vm from 'node:vm'
 import { createRequire } from 'node:module'
 import { EventEmitter } from 'node:events'
 
+// Keep the tray test on the real restore path rather than a show-always stub.
+const mainSource = fs.readFileSync(path.join(__dirname, '../electron/main.js'), 'utf8')
+const focusWindow = vm.runInNewContext(`(${mainSource.match(/function focusWindow\(win\) \{[\s\S]*?\n\}/)[0]})`)
+
 // Exercise native event ordering without touching the user's running Electron app.
 const setup = ({ enabled = true, emptyIcon = false, failTray = false } = {}) => {
   const trays = []
@@ -22,12 +26,12 @@ const setup = ({ enabled = true, emptyIcon = false, failTray = false } = {}) => 
     isMinimized: () => minimized,
     hide: vi.fn(() => { visible = false; window.emit('hide') }),
     show: vi.fn(() => { visible = true; window.emit('show') }),
-    restore: vi.fn(() => { minimized = false; window.emit('restore') }),
+    restore: vi.fn(() => { minimized = false; visible = true; window.emit('restore') }),
     focus: vi.fn(),
     destroy: vi.fn(),
     webContents: Object.assign(new EventEmitter(), { send: vi.fn() }),
   })
-  const showWindow = vi.fn(() => { window.restore(); window.show(); window.focus() })
+  const showWindow = vi.fn(() => focusWindow(window))
   const quit = vi.fn(() => { quitting = true })
   const electron = {
     nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => emptyIcon })) },
@@ -88,6 +92,16 @@ test('enabled tray hides on minimize and restores the same window on click or Op
   state.trays[0].menu.find((item) => item.label === 'Open Atlas').click()
   expect(state.showWindow).toHaveBeenCalledTimes(2)
   expect(state.window.webContents.send).toHaveBeenLastCalledWith('window-visibility-changed', true)
+})
+
+test('tray restore explicitly shows the renderer even when native restore already reports visible', () => {
+  const state = setup()
+  state.minimize()
+  state.trays[0].emit('click')
+  expect(state.window.isVisible()).toBe(true)
+  expect(state.window.restore).toHaveBeenCalledOnce()
+  expect(state.window.show).toHaveBeenCalledOnce()
+  expect(state.window.show.mock.invocationCallOrder[0]).toBeLessThan(state.window.focus.mock.invocationCallOrder[0])
 })
 
 test('tray hide waits for native minimize dispatch to avoid input-dead restore', () => {

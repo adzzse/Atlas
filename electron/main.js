@@ -1094,7 +1094,8 @@ function quitFromMainWindow() {
 function focusWindow(win) {
   if (!win || win.isDestroyed()) return
   if (win.isMinimized()) win.restore()
-  if (!win.isVisible()) win.show()
+  // A restored hidden window can report visible while its renderer still needs show().
+  win.show()
   win.focus()
 }
 
