@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Native window visibility stays separate from Chromium's unthrottled page state. */
+html[data-atlas-window-hidden] *,
+html[data-atlas-window-hidden] *::before,
+html[data-atlas-window-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
 /*
  * ── Design tokens ────────────────────────────────────────────────────────
  * These CSS variables are the single source of truth for theming. They are

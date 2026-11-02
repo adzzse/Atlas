@@ -30,6 +30,7 @@
   - Path resolution highlighting: red if invalid, green if path exists or pass the check.
   
 ### Added
+- Optional Minimize to tray keeps Atlas and its background tasks running, with Open Atlas/Exit tray actions and paused hidden-window videos. Closing Atlas still exits.
 - Collections can opt into creator folders for future installs/imports. Install and import forms can select a collection and preview the destination; other games keep the configured library structure.
 - Collections can now hide their member games from the main Library through a right-click checkbox. Hidden members remain installed and still appear when any containing collection is opened.
 - Add a settings in Metadata section to clear web image cache to prevent image cached from transient 404 errors

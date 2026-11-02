@@ -243,6 +243,11 @@ module.exports = function registerSettingsHandlers(ctx) {
       fs.writeFileSync(ctx.configPath, ini.stringify(nextSettings))
       ctx.appConfig = nextSettings
 
+      // Toggle the native tray immediately, using the newly persisted live config.
+      if (previousInterface?.minimizeToTray !== nextSettings?.Interface?.minimizeToTray) {
+        ctx.syncMainWindowTray?.()
+      }
+
       // Theme changes need to apply live across every open window (main
       // library, settings, importer, game details) since each is its own
       // BrowserWindow with its own renderer process — saving to disk alone

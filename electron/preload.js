@@ -1,6 +1,10 @@
 // src/renderer.js
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+// The main window may hide before React mounts or while its renderer reloads.
+let windowVisible = true;
+ipcRenderer.on("window-visibility-changed", (event, visible) => { windowVisible = visible === true; });
+
 contextBridge.exposeInMainWorld("electronAPI", {
   isWindows: () => process.platform === "win32",
   isLinux: () => process.platform === "linux",
@@ -329,6 +333,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("recalculate-version-size", params),
   onWindowStateChanged: (callback) => {
     ipcRenderer.on("window-state-changed", (event, state) => callback(state));
+  },
+  // Each subscriber owns its cleanup, so unmounting cannot remove another listener.
+  onWindowVisibilityChanged: (callback) => {
+    const listener = (event, visible) => callback(visible === true);
+    ipcRenderer.on("window-visibility-changed", listener);
+    callback(windowVisible);
+    return () => ipcRenderer.removeListener("window-visibility-changed", listener);
   },
   onAppearanceChanged: (callback) => {
     ipcRenderer.on("appearance-changed", (event, appearance) => callback(appearance));

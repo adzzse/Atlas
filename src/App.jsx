@@ -54,6 +54,7 @@ import {
 } from './utils/viewSortPreferences.js'
 import { formatPercent, formatProgressNumber, sanitizePercentText } from './utils/formatPercent.js'
 import { BROWSE_MODE_ENABLED } from './features.js'
+import { watchWindowMedia } from './utils/windowMedia.js'
 
 const debounce = (func, delay) => {
   let timeout
@@ -149,6 +150,7 @@ export class AppErrorBoundary extends Component {
 }
 
 const App = () => {
+  useEffect(() => watchWindowMedia(), [])
   const [selectedGame, setSelectedGame] = useState(null)
   const [sidebarMode, setSidebarMode] = useState(SIDE_PANEL_MODES.GAMES)
   const [libraryMode, setLibraryMode] = useState('local')

@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen, session, protocol, desktopCapturer } = require('electron')
 const path = require('path')
+const { createMainWindowTray } = require('./mainWindowTray')
 
 // Local downloaded media (banners/previews) is served to renderers through a
 // dedicated privileged scheme. Raw file:// URLs are blocked when the renderer
@@ -188,6 +189,7 @@ let activeImportSession = null
 let activeLibraryValidation = null
 let activeScanSession = null
 let isQuitting = false
+let mainWindowTray = null
 
 let updateInfo = null
 let updateDownloaded = false
@@ -1525,7 +1527,15 @@ function createWindow() {
     e.preventDefault()
     quitFromMainWindow()
   })
-  mainWindow.on('closed', () => { mainWindow = null })
+  mainWindow.on('closed', () => { mainWindow = null; mainWindowTray = null })
+  mainWindowTray = createMainWindowTray({
+    window: mainWindow,
+    getEnabled: () => appConfig?.Interface?.minimizeToTray === true,
+    isQuitting: () => isQuitting,
+    showWindow: () => focusWindow(mainWindow),
+    quit: quitFromMainWindow,
+    iconPath: path.join(__dirname, '..', 'src', 'assets', 'ui', 'appicon.png'),
+  })
   return mainWindow
 }
 
@@ -1875,6 +1885,8 @@ function buildCtx() {
     createSettingsWindow, createImporterWindow, createGameDetailsWindow, showExecutableChooser,
     createThemeBuilderWindow, createBannerEditorWindow, createImporterHelpWindow,
     quitFromMainWindow,
+    // Settings may save before a replacement main window has finished opening.
+    syncMainWindowTray: () => mainWindowTray?.sync(),
     // state
     appDataRoot, appConfig, configPath, dataDir, launcherDir, templatesDir, themeTemplatesDir,
     imagesDir, updatesDir,
@@ -2570,6 +2582,7 @@ app.on('before-quit', () => {
   clearInterval(appUpdateTimer)
   stopExtensionServer()
   isQuitting = true
+  mainWindowTray?.dispose()
 })
 
 app.on('window-all-closed', () => {

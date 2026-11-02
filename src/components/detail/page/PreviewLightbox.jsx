@@ -38,13 +38,21 @@ function fitSize(natural, vp) {
 export default function PreviewLightbox({ previews, lightboxIndex, onClose, onPrev, onNext }) {
   const vp = useViewport()
   const [natural, setNatural] = useState(null)
+  const [windowVisible, setWindowVisible] = useState(true)
+  const [interruptedEmbed, setInterruptedEmbed] = useState(null)
   const raw = lightboxIndex === null ? null : previews[lightboxIndex]
   // previews may be plain URL strings OR enriched objects ({ url, ... }).
   const current = raw && typeof raw === 'string' ? raw : (raw?.url || raw)
   const key = lightboxIndex === null ? null : current
 
   // Reset measured size whenever the displayed media changes.
-  useEffect(() => { setNatural(null) }, [key])
+  useEffect(() => { setNatural(null); setInterruptedEmbed(null) }, [key])
+
+  // shortcut: embeds reload without autoplay after hiding; use provider controls when position restoration is needed.
+  useEffect(() => window.electronAPI?.onWindowVisibilityChanged?.((visible) => {
+    if (!visible && key !== null) setInterruptedEmbed(key)
+    setWindowVisible(visible)
+  }), [key])
 
   // Migrate the navigation callbacks from GameDetails to here to control all lightbox navigation
   const navRef = useRef({ onClose, onPrev, onNext })
@@ -72,7 +80,7 @@ export default function PreviewLightbox({ previews, lightboxIndex, onClose, onPr
     const watch = u.match(/[?&]v=([A-Za-z0-9_-]{6,})/i)
     const short = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/i)
     id = (embed && embed[1]) || (watch && watch[1]) || (short && short[1]) || ''
-    return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0` : ''
+    return id ? `https://www.youtube.com/embed/${id}?autoplay=${interruptedEmbed === key ? 0 : 1}&rel=0` : ''
   })()
   const isYouTube = !!youTubeEmbed
   const fit = fitSize(natural, vp)
@@ -124,7 +132,7 @@ export default function PreviewLightbox({ previews, lightboxIndex, onClose, onPr
 
       {/* Media — sized to the fitted rectangle so empty space around it is the
           backdrop, which closes the viewer on click. */}
-      {isYouTube ? (
+      {isYouTube ? windowVisible && (
         <iframe
           src={youTubeEmbed}
           title={`Trailer ${lightboxIndex + 1}`}

@@ -14,6 +14,7 @@ const Interface = () => {
   const [language, setLanguage] = useState("English");
   const [atlasStartup, setAtlasStartup] = useState("Do Nothing");
   const [gameStartup, setGameStartup] = useState("Do Nothing");
+  const [minimizeToTray, setMinimizeToTray] = useState(false);
   const [browserId, setBrowserId] = useState("default");
   const [browsers, setBrowsers] = useState([]);
   const [customBrowserPaths, setCustomBrowserPaths] = useState([]);
@@ -63,6 +64,7 @@ const Interface = () => {
       setLanguage(interfaceSettings.language || "English");
       setAtlasStartup(interfaceSettings.atlasStartup || "Do Nothing");
       setGameStartup(interfaceSettings.gameStartup || "Do Nothing");
+      setMinimizeToTray(interfaceSettings.minimizeToTray === true);
       setBrowserId(interfaceSettings.browserId || "default");
       setCustomBrowserPaths(Array.isArray(interfaceSettings.customBrowserPaths) ? interfaceSettings.customBrowserPaths : []);
       setBrowsers(Array.isArray(detected) ? detected : []);
@@ -324,6 +326,21 @@ const Interface = () => {
       </div>
       <p className="text-xs opacity-50 mb-2">
         Changing the system language will require a restart
+      </p>
+      <div className="border-t border-text opacity-25 my-2"></div>
+      <label className="flex items-center justify-between mb-2">
+        <span>Minimize to tray</span>
+        <input
+          type="checkbox"
+          checked={minimizeToTray}
+          onChange={(event) => {
+            setMinimizeToTray(event.target.checked);
+            saveSettings({ minimizeToTray: event.target.checked });
+          }}
+        />
+      </label>
+      <p className="text-xs opacity-50 mb-2">
+        Keep Atlas running in the system tray when minimizing. Closing Atlas still exits.
       </p>
       <div className="border-t border-text opacity-25 my-2"></div>
       <div className="flex items-center mb-2">
