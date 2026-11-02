@@ -44,9 +44,12 @@ function createMainWindowTray({ window, getEnabled, isQuitting, showWindow, quit
     }
   }
 
-  // Native minimize events cover the caption button and OS shortcuts alike.
+  // Windows can lose input on restore if hide() re-enters native minimize dispatch.
   const minimize = () => {
-    if (!isQuitting() && getEnabled() && tray && !tray.isDestroyed()) window.hide()
+    setImmediate(() => {
+      if (window.isDestroyed() || isQuitting() || !getEnabled() || !tray || tray.isDestroyed() || !window.isMinimized()) return
+      window.hide()
+    })
     publishVisibility()
   }
 
@@ -56,7 +59,8 @@ function createMainWindowTray({ window, getEnabled, isQuitting, showWindow, quit
     window.removeListener('minimize', minimize)
     for (const event of ['show', 'hide', 'restore']) window.removeListener(event, publishVisibility)
     window.removeListener('closed', dispose)
-    window.webContents.removeListener('did-finish-load', publishVisibility)
+    // BrowserWindow's webContents getter throws once the native window is closed.
+    if (!window.isDestroyed()) window.webContents.removeListener('did-finish-load', publishVisibility)
   }
 
   window.on('minimize', minimize)

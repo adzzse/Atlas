@@ -13,6 +13,9 @@ const setup = ({ enabled = true, emptyIcon = false, failTray = false } = {}) => 
   let minimized = false
   let quitting = false
   let currentEnabled = enabled
+  const deferred = []
+  // Keep native dispatch separate so a rapid restore can invalidate pending hide.
+  const flush = () => { while (deferred.length) deferred.shift()() }
   Object.assign(window, {
     isDestroyed: () => false,
     isVisible: () => visible,
@@ -45,6 +48,7 @@ const setup = ({ enabled = true, emptyIcon = false, failTray = false } = {}) => 
   const module = { exports: {} }
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../electron/mainWindowTray.js'), 'utf8'), {
     module, require: () => electron, console: { warn: vi.fn() },
+    setImmediate: (callback) => deferred.push(callback),
   })
   const controller = module.exports.createMainWindowTray({
     window, getEnabled: () => currentEnabled, isQuitting: () => quitting,
@@ -52,7 +56,12 @@ const setup = ({ enabled = true, emptyIcon = false, failTray = false } = {}) => 
   })
   return {
     window, trays, controller, showWindow, quit,
-    minimize: () => { minimized = true; window.emit('minimize') },
+    minimize: ({ flushDeferred = true } = {}) => {
+      minimized = true
+      window.emit('minimize')
+      if (flushDeferred) flush()
+    },
+    flush,
     setEnabled: (value) => { currentEnabled = value; controller.sync() },
   }
 }
@@ -79,6 +88,38 @@ test('enabled tray hides on minimize and restores the same window on click or Op
   state.trays[0].menu.find((item) => item.label === 'Open Atlas').click()
   expect(state.showWindow).toHaveBeenCalledTimes(2)
   expect(state.window.webContents.send).toHaveBeenLastCalledWith('window-visibility-changed', true)
+})
+
+test('tray hide waits for native minimize dispatch to avoid input-dead restore', () => {
+  const state = setup()
+  state.minimize({ flushDeferred: false })
+  expect(state.window.hide).not.toHaveBeenCalled()
+  expect(state.window.webContents.send).toHaveBeenLastCalledWith('window-visibility-changed', false)
+  state.flush()
+  expect(state.window.hide).toHaveBeenCalledOnce()
+  state.trays[0].emit('click')
+  expect(state.window.focus).toHaveBeenCalledOnce()
+  expect(state.window.webContents.send).toHaveBeenLastCalledWith('window-visibility-changed', true)
+})
+
+test('a tray restore before deferred hide runs does not hide the window again', () => {
+  const state = setup()
+  state.minimize({ flushDeferred: false })
+  state.trays[0].emit('click')
+  state.flush()
+  expect(state.window.hide).not.toHaveBeenCalled()
+  expect(state.window.webContents.send).toHaveBeenLastCalledWith('window-visibility-changed', true)
+})
+
+test.each(['disable', 'quit', 'dispose', 'close'])('pending tray hide is skipped after %s', (action) => {
+  const state = setup()
+  state.minimize({ flushDeferred: false })
+  if (action === 'disable') state.setEnabled(false)
+  if (action === 'quit') state.quit()
+  if (action === 'dispose') state.controller.dispose()
+  if (action === 'close') state.window.emit('closed')
+  state.flush()
+  expect(state.window.hide).not.toHaveBeenCalled()
 })
 
 test('live enable/disable creates one icon and restores before removing a hidden window entry point', () => {
@@ -128,6 +169,17 @@ test('closing the main window removes its tray without changing the existing clo
   state.window.emit('closed')
   expect(state.trays[0].destroy).toHaveBeenCalledOnce()
   expect(state.window.hide).not.toHaveBeenCalled()
+})
+
+test('closed-window tray cleanup does not access the destroyed native webContents getter', () => {
+  const state = setup()
+  state.window.isDestroyed = () => true
+  Object.defineProperty(state.window, 'webContents', {
+    get: () => { throw new TypeError('Object has been destroyed') },
+  })
+  expect(() => state.window.emit('closed')).not.toThrow()
+  expect(state.trays[0].destroy).toHaveBeenCalledOnce()
+  expect(state.window.listenerCount('minimize')).toBe(0)
 })
 
 test('preload remembers visibility before subscription and unsubscribes only its listener', () => {

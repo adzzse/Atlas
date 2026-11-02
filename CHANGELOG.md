@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Minimize to tray now defers hiding until native minimize dispatch finishes to avoid re-entering Windows window transitions; stale hides are skipped after restore or shutdown, and closed-window cleanup no longer accesses destroyed native contents.
 - Game Details now shows Last Updated from the game's source metadata alongside Release Date.
 - Wishlist now loads likes, views, and separate community ratings; metric sorting uses the higher F95/LewdCorner value while preserving source ratings for display.
 - Wishlist Last Updated sorting now receives the linked F95/LewdCorner update dates instead of falling back to title order.
