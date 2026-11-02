@@ -356,6 +356,15 @@ const parseSortableMetric = (value) => {
   return Number.isFinite(amount) ? amount * multiplier : null
 }
 
+// Preserve source ratings for display; Wishlist alone follows Browse's best-source sort.
+const getSortMetric = (game, field) => {
+  const value = parseSortableMetric(game[field])
+  if (!game.wishlist_id) return value
+  const sourceField = `lewdcorner${field[0].toUpperCase()}${field.slice(1)}`
+  const best = Math.max(value ?? 0, parseSortableMetric(game[sourceField]) ?? 0)
+  return best > 0 ? best : null
+}
+
 const getReleaseDateValue = (game = {}) => {
   const rawValue = game.release_date ?? game.releaseDate ?? game.steam_release_date ?? game.steamReleaseDate
   if (rawValue === undefined || rawValue === null || rawValue === '') return null
@@ -472,7 +481,7 @@ const compareLocalGames = (a, b, activeFilters) => {
   } else if (activeFilters.sort === 'lastUpdated') {
     result = compareMaybeNumber(getBrowseDate(a, 'thread_updated'), getBrowseDate(b, 'thread_updated'), direction)
   } else if (['likes', 'views', 'rating'].includes(activeFilters.sort)) {
-    result = compareMaybeNumber(parseSortableMetric(a[activeFilters.sort]), parseSortableMetric(b[activeFilters.sort]), direction)
+    result = compareMaybeNumber(getSortMetric(a, activeFilters.sort), getSortMetric(b, activeFilters.sort), direction)
   } else if (activeFilters.sort === 'installedVersionCount') {
     result = compareMaybeNumber(getInstalledVersionCount(a), getInstalledVersionCount(b), direction)
   } else if (activeFilters.sort === 'newlyInstalled') {
