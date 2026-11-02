@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Game Details now shows Last Updated from the game's source metadata alongside Release Date.
 - Wishlist now loads likes, views, and separate community ratings; metric sorting uses the higher F95/LewdCorner value while preserving source ratings for display.
 - Wishlist Last Updated sorting now receives the linked F95/LewdCorner update dates instead of falling back to title order.
 - Fork sync keeps downloaded-banner fallbacks alongside Nightly file checks and avoids duplicate media downloads after Wishlist installs.

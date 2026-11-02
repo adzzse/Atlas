@@ -34,6 +34,7 @@ import ExternalLinksSection from './ExternalLinksSection.jsx'
 import PlaystatePicker from '../ui/PlaystatePicker.jsx'
 import { effectiveTitlePlaystate } from '../../utils/playstates.js'
 import { toMediaSrc } from '../../utils/mediaSrc.js'
+import { parseAtlasDbThreadDate } from '../../hooks/useFilters.js'
 
 const isSteamInstallPath = (value) =>
   /(?:^|[\\/])steamapps[\\/]common(?:[\\/]|$)/i.test(String(value || ''))
@@ -734,6 +735,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
     onSaved: () => onRefresh?.(game?.record_id),
   })
   const totalTitlePlaytime = game.totalPlaytime ?? game.total_playtime
+  const lastUpdated = parseAtlasDbThreadDate(game.threadUpdated || game.thread_updated || game.lewdcornerThreadUpdated, game)
 
   // Comprehensive Details card. Only known fields render (empties filtered).
   // Rules: collapse long language lists; hide Translations for Steam (its
@@ -743,6 +745,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
     ['Developer', developer],
     ['Publisher', game.publisher],
     ['Release Date', formatReleaseDate(game)],
+    ['Last Updated', lastUpdated === null ? null : new Date(lastUpdated).toISOString().slice(0, 10)],
     ['Status', game.status],
     ['Engine', game.engine],
     ['Genre', game.genre],
