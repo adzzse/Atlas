@@ -27,6 +27,17 @@ const { auditSeasonMerges, applySeasonMerge, applyAllSeasonMerges } = require('.
 const { addBlacklistEntry, removeBlacklistEntry, getBlacklistEntries } = require('../db/blacklist')
 const { parseCatalogRef } = require('../library/catalogRef')
 
+// Every window, not just the sender: both delete paths use this helper so the
+// renderer always sees game-deleted + downloads-changed in one broadcast.
+function broadcastGameDeleted(recordId) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('game-deleted', recordId)
+      win.webContents.send('downloads-changed', {})
+    }
+  })
+}
+
 // Guards against two full rebuilds interleaving their chunked transactions on
 // the single shared sqlite connection.
 let catalogIndexRebuildInFlight = false
@@ -376,9 +387,7 @@ function registerGamesHandlers(ctx) {
   ipcMain.handle('delete-game-completely', async (_, recordId) => {
     const result = await deleteGameCompletely(recordId, getAssetBasePath(), process.defaultApp)
     if (result.success) {
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('game-deleted', recordId)
-      })
+      broadcastGameDeleted(recordId)
     }
     return result
   })
@@ -1028,4 +1037,4 @@ function registerGamesHandlers(ctx) {
   })
 }
 
-module.exports = { registerGamesHandlers, launchGame }
+module.exports = { registerGamesHandlers, launchGame, broadcastGameDeleted }

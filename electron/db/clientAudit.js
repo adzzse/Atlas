@@ -53,6 +53,7 @@ const yieldToLoop = () => new Promise((resolve) => setImmediate(resolve))
 // SQLite reuses ids, and a leftover child can bleed into a later game that
 // happens to reuse its id.
 const RECORD_CHILD_TABLES = [
+  'preview_sort', 'media_source_cache', 'downloads', 'collection_games',
   'versions', 'atlas_mappings', 'tag_mappings', 'game_metadata_overrides',
   'previews', 'banners', 'media_assets', 'f95_zone_mappings',
   'lewdcorner_mappings', 'steam_mappings', 'gog_mappings', 'game_personal_ratings',
@@ -112,20 +113,6 @@ const auditConfig = async (ctx) => {
       })
       result.status = 'issues'
       result.count += report.removedKeys.length
-    }
-    // Values updated in place, not removed. The same startup backup behind
-    // the removals applies here.
-    if (report.changedKeys?.length > 0) {
-      result.findings.push({
-        label: 'Settings values replaced at startup',
-        count: report.changedKeys.length,
-        detail: report.backupPath
-          ? `Updated to the current version's format; backed up to ${path.basename(report.backupPath)} first.`
-          : 'Updated to the current version\u2019s format.',
-        samples: report.changedKeys.map((k) => `[${k.section}] ${k.key}`),
-      })
-      result.status = 'issues'
-      result.count += report.changedKeys.length
     }
     if (report.removedSections.length > 0) {
       result.findings.push({

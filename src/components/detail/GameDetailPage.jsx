@@ -207,6 +207,18 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
   const [personalRatingsBusy, setPersonalRatingsBusy] = useState(false)
   const [personalRatingsError, setPersonalRatingsError] = useState('')
   const [ratingModalOpen, setRatingModalOpen] = useState(false)
+  // In-app confirm/alert modal to avoid native dialogs that steal focus from
+  // the BrowserWindow (the root cause of the search-box focus bug after delete).
+  const [dialog, setDialog] = useState(null)
+  const [dialogBusy, setDialogBusy] = useState(false)
+  const showAlert = (title, body) => setDialog({ alert: true, title, body })
+  const openConfirm = (opts) => setDialog(opts)
+  const closeDialog = () => { if (!dialogBusy) setDialog(null) }
+  const runDialogAction = async (action) => {
+    setDialogBusy(true)
+    try { await action?.() }
+    finally { setDialogBusy(false) }
+  }
 
   // Customizable 3-column panel layout (shared across all games, saved to config
   // under Appearance.detailLayout). editingLayout toggles drag-and-drop.
@@ -561,7 +573,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
   // Escape closes the page, but only when nothing else owns the key: the
   // lightbox closes itself and open modals keep focus.
   useEffect(() => {
-    const modalOpen = ratingModalOpen || refreshModalOpen || installSourceModalOpen || Boolean(folderError)
+    const modalOpen = ratingModalOpen || refreshModalOpen || installSourceModalOpen || Boolean(folderError) || Boolean(dialog)
     const onKey = (event) => {
       if (event.key !== 'Escape') return
       if (!escClosesDetail({
@@ -574,7 +586,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightboxIndex, ratingModalOpen, refreshModalOpen, installSourceModalOpen, folderError, onBack])
+  }, [lightboxIndex, ratingModalOpen, refreshModalOpen, installSourceModalOpen, folderError, dialog, onBack])
 
   // Authoritative launch state, driven by the main process: RUNNING is held for
   // the lifetime of the game process (tracked launches) and released on exit.
@@ -905,12 +917,16 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
 
   const uninstallSteam = activeSteamAppId && canManageLocalTitle && canLaunch
     ? async () => {
-        const confirmed = window.confirm(
-          `Ask Steam to uninstall "${game.title}"?\n\nAtlas will keep this title and its metadata. Atlas local files are not deleted by this action.`,
-        )
-        if (!confirmed) return
-        await window.electronAPI.openExternalUrl(`steam://uninstall/${activeSteamAppId}`)
-        scheduleInstalledStateRefresh()
+        openConfirm({
+          title: 'Uninstall via Steam',
+          body: `Ask Steam to uninstall "${game.title}"?\n\nAtlas will keep this title and its metadata. Atlas local files are not deleted by this action.`,
+          confirmLabel: 'Uninstall',
+          tone: 'danger',
+          onConfirm: () => runDialogAction(async () => {
+            await window.electronAPI.openExternalUrl(`steam://uninstall/${activeSteamAppId}`)
+            scheduleInstalledStateRefresh()
+          }),
+        })
       }
     : null
 
@@ -1084,7 +1100,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
         : await window.electronAPI.toggleWishlistEntry?.(game)
       if (!result?.success) {
         if (result?.inLibrary) {
-          alert('This title is already in your Library.')
+          showAlert('Duplicate', 'This title is already in your Library.')
           return
         }
         throw new Error(result?.error || 'Wishlist update failed')
@@ -1094,7 +1110,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       await onWishlistChanged?.({ ...result, isWishlisted: nextWishlisted }, game)
     } catch (err) {
       console.error('Failed to update wishlist:', err)
-      alert(`Failed to update Wishlist: ${err.message || err}`)
+      showAlert('Wishlist update failed', `Failed to update Wishlist: ${err.message || err}`)
     } finally {
       setWishlistBusy(false)
     }
@@ -1113,7 +1129,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       onBlacklisted?.(result, game)
     } catch (err) {
       console.error('Failed to blacklist game:', err)
-      alert(`Failed to blacklist this game: ${err.message || err}`)
+      showAlert('Blacklist update failed', `Failed to blacklist this game: ${err.message || err}`)
     } finally {
       setBlacklistBusy(false)
     }
@@ -1132,7 +1148,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
     } catch (err) {
       setIsFavorite(!nextFavorite)
       console.error('Failed to update favorite:', err)
-      alert(`Failed to update Favorite: ${err.message || err}`)
+      showAlert('Favorite update failed', `Failed to update Favorite: ${err.message || err}`)
     } finally {
       setFavoriteBusy(false)
     }
@@ -1146,7 +1162,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       onRefresh?.(game.record_id)
     } catch (err) {
       console.error('Failed to update title playstate:', err)
-      alert(`Failed to update playstate: ${err.message || err}`)
+      showAlert('Playstate update failed', `Failed to update playstate: ${err.message || err}`)
     }
   }
 
@@ -1158,7 +1174,7 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       onRefresh?.(game.record_id)
     } catch (err) {
       console.error('Failed to update version playstate:', err)
-      alert(`Failed to update version playstate: ${err.message || err}`)
+      showAlert('Playstate update failed', `Failed to update version playstate: ${err.message || err}`)
     }
   }
 
@@ -1202,20 +1218,34 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
 
   const removeTitleFromLibrary = async () => {
     if (!canManageLocalTitle) return
-    if (!window.confirm(`Remove "${game.title}" from the local library?\n\nGame files will be kept on disk.`)) return
-    const result = await window.electronAPI.deleteTitle({ recordId: game.record_id, deleteFiles: false })
-    if (!result.success) { alert(`Failed to remove title: ${result.error || 'Unknown error'}`); return }
-    onBack?.()
+    openConfirm({
+      title: 'Remove title from library',
+      body: `Remove "${game.title}" from the local library?\n\nGame files will be kept on disk.`,
+      confirmLabel: 'Remove Title',
+      tone: 'danger',
+      onConfirm: () => runDialogAction(async () => {
+        const result = await window.electronAPI.deleteTitle({ recordId: game.record_id, deleteFiles: false })
+        if (!result.success) { showAlert('Remove failed', result.error || 'Unknown error'); return }
+        onBack?.()
+      }),
+    })
   }
 
   const deleteTitleAndFiles = async () => {
     if (!canManageLocalTitle) return
     const versionPaths = (game.versions || []).map((v) => v.game_path).filter(Boolean)
     const pathList = versionPaths.length ? `\n\nFolders to delete:\n${versionPaths.join('\n')}` : '\n\nNo linked folders were found.'
-    if (!window.confirm(`Delete "${game.title}" and all linked files from disk?${pathList}\n\nThis cannot be undone.`)) return
-    const result = await window.electronAPI.deleteTitle({ recordId: game.record_id, deleteFiles: true })
-    if (!result.success) { alert(`Failed to delete title: ${result.error || 'Unknown error'}`); return }
-    onBack?.()
+    openConfirm({
+      title: 'Delete title and files',
+      body: `Delete "${game.title}" and all linked files from disk?${pathList}\n\nThis cannot be undone.`,
+      confirmLabel: 'Delete Everything',
+      tone: 'danger',
+      onConfirm: () => runDialogAction(async () => {
+        const result = await window.electronAPI.deleteTitle({ recordId: game.record_id, deleteFiles: true })
+        if (!result.success) { showAlert('Delete failed', result.error || 'Unknown error'); return }
+        onBack?.()
+      }),
+    })
   }
 
   const refreshMetadataAndImages = () => {
@@ -1231,12 +1261,12 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
       if (result?.success === false) throw new Error(result.error || 'Refresh failed')
       if (Array.isArray(result?.previewUrls)) setPreviews(filterOutBanner(result.previewUrls, game.banner_url))
       if (result?.failed > 0) {
-        alert(`Media refresh completed with ${result.failed} failed image(s). Atlas skipped them and kept the successful files.\n\n${result.errors?.[0] || ''}`)
+        showAlert('Media refresh completed', `Media refresh completed with ${result.failed} failed image(s). Atlas skipped them and kept the successful files.\n\n${result.errors?.[0] || ''}`)
       }
       onRefresh?.(game.record_id)
       setRefreshModalOpen(false)
     } catch (error) {
-      alert(`Failed to refresh media: ${error.message}`)
+      showAlert('Refresh failed', `Failed to refresh media: ${error.message}`)
     } finally {
       setIsRefreshingMedia(false)
     }
@@ -1833,6 +1863,19 @@ const GameDetailPage = ({ game, onBack, onRefresh, onWishlistChanged, openRating
         body={folderError}
         confirmLabel="OK"
         onCancel={() => setFolderError('')}
+      />
+
+      <ConfirmModal
+        open={!!dialog}
+        title={dialog?.title}
+        body={dialog?.body}
+        confirmLabel={dialog?.confirmLabel}
+        cancelLabel={dialog?.cancelLabel}
+        tone={dialog?.tone}
+        alert={dialog?.alert}
+        busy={dialogBusy}
+        onConfirm={dialog?.onConfirm}
+        onCancel={closeDialog}
       />
 
       <RefreshMediaModal

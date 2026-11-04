@@ -1,8 +1,18 @@
 # Change note
 
-Sổ theo dõi tùy biến của `adzzse/Atlas`, lập ngày **03/09/2026**. Dùng để đối chiếu sau mỗi lần đưa thay đổi từ Nightly gốc vào Fork; không thay thế `CHANGELOG.md` của upstream.
+Sổ theo dõi tùy biến của `adzzse/Atlas`, lập ngày **03/09/2026**, cập nhật theo code/test ngày **04/11/2026**. Dùng để đối chiếu sau mỗi lần đưa thay đổi từ Nightly gốc vào Fork; không thay thế `CHANGELOG.md` và `NIGHTLY.CHANGELOG.md` của upstream.
 
-## 1. Mốc đã xác nhận
+## 1. Trạng thái source và mốc lịch sử
+
+### Source đối chiếu ngày 04/11/2026
+
+- Branch `fork`, remote cá nhân `origin=https://github.com/adzzse/Atlas.git`; upstream `https://github.com/towerwatchman/Atlas.git`, push URL `DISABLED`.
+- Fork trước lần merge này: `6f3bd03fe11a2b31f89377cd6ea3ec91b4abf443`, trùng `origin/fork` khi fetch. Nightly đã tích hợp trước đó: `a226109ed602255727f6782b2fb611b580ccea99` qua merge `f6dc5be4975d1efaebb83d005c4b929ab721dead`.
+- Nguồn lần này: `upstream/nightly` tại `464cdc0468f53d91a27b15f2d7ea6d97647ef262`, changelog `0.9.15-nightly.518`, version nền `package.json` là `0.9.15`. Có 15 commit upstream mới; dùng merge thường hai parent, giữ nguyên lịch sử fork đã push.
+- SHA tích hợp là merge commit chứa bản cập nhật note này; parent thứ nhất là `6f3bd03`, parent thứ hai là `464cdc0`. Không ghi SHA của chính commit vào nội dung của nó.
+- Phạm vi xác nhận hiện tại là source, test tự động và renderer build. **Không xác nhận phiên bản app đang cài/chạy, installer, updater hay dữ liệu thật trong lần này.** Các thông tin bên dưới là lịch sử, không phải kết quả runtime ngày 04/11.
+
+### Mốc lịch sử 03/09/2026
 
 - Repo cá nhân: [adzzse/Atlas](https://github.com/adzzse/Atlas), branch làm việc và phát hành: `fork`.
 - Nguồn mã gốc: [towerwatchman/Atlas — nightly](https://github.com/towerwatchman/Atlas/tree/nightly). Baseline khi hoàn tất tính năng: `cd8ad077b36050d2ab1934b3ddd2483e5df55198`.
@@ -90,18 +100,83 @@ Sổ theo dõi tùy biến của `adzzse/Atlas`, lập ngày **03/09/2026**. Dù
 - Mỗi request ảnh có deadline tổng và timeout **30 giây**, chỉ thử **một lần trong một lượt refresh**. Atlas bỏ qua URL lỗi, tiếp tục ảnh kế tiếp và báo số ảnh thất bại; không retry 2–3 lần khi CDN đang lỗi.
 - Một lỗi tải GIF được ghi nhớ trong chính lần xử lý đó, nên nhánh animated và ảnh tĩnh không tạo request thứ hai cho cùng URL.
 - Tiến độ vẫn đi đến cuối khi ảnh lỗi hoặc source bị rate-limit. Refresh từng game và toàn thư viện trả/hiển thị số ảnh lỗi; file tải thành công được giữ lại.
+- Trang chi tiết dùng modal trong app của Nightly để báo refresh có ảnh lỗi, giữ nguyên số lỗi và lỗi đầu tiên của Fork; không gọi native `alert` trong nhánh này. Esc không rời trang khi modal xác nhận/cảnh báo đang mở.
 - `Missing only` không dùng điều kiện “đã có ít nhất một preview” cho cả bộ. `downloadImages()` kiểm tra file xác định của từng banner/preview/asset và chỉ tải derivative còn thiếu.
 - Cửa sổ chi tiết không `new Image()` toàn bộ preview trước khi render. `SafeImage` xử lý lỗi từng ảnh và preview dùng `loading="lazy"` để chỉ tải khi cần hiển thị.
 - Mã: `electron/imageUtils.js`, `electron/ipc/media.js`, `src/App.jsx`, `src/components/detail/GameDetailPage.jsx`, `src/components/detail/GameDetailsWindow.jsx`, `src/components/detail/window/MediaTab.jsx`.
-- Kiểm chứng: `tests/media-download-resilience.test.js`, `tests/media-db-helpers.test.js`, `npm run check` và commit `cdf30140a4cb266de2116cd46191d811b12424da`.
+- Kiểm chứng: `tests/media-download-resilience.test.js`, `tests/media-db-helpers.test.js`, `tests/detail-dialogs.test.jsx`, `npm run check` và commit gốc `cdf30140a4cb266de2116cd46191d811b12424da`.
 
 ### F10 — Download từ Wishlist tự lưu media local
 
 - Khi một download từ Wishlist/Browse được cài thành công và lần đầu promote thành record trong Library, Atlas tự chạy `missing` media refresh ở nền nếu `Metadata.mediaStorageMode=download`.
 - Luồng này không phụ thuộc hai tùy chọn ảnh riêng của Importer vì Download Manager không đi qua `import-games`. Chế độ `stream` vẫn không ghi ảnh local.
 - Lỗi CDN/media chỉ được ghi nhận và không biến một game đã cài thành công thành cài đặt thất bại. Downloader dùng lại toàn bộ cơ chế chịu lỗi của F09, không có bản tải ảnh thứ hai.
+- Hook promote dùng `autoDownloadPromotedMedia` với `ctx.refreshGameMedia`; nhánh tải media sau cài của Nightly chỉ chạy khi `!promotion`. Giữ cả hai để game đã có record cũng được bổ sung ảnh mà game vừa promote không tải lặp.
 - Mã: `electron/ipc/importer.js`, `electron/ipc/media.js`.
 - Kiểm chứng: `tests/wishlist-download-media.test.js`, `tests/media-download-resilience.test.js` và `npm run check`.
+
+### F11 — Lưu thứ tự Library và Wishlist độc lập
+
+- Lưu cả trường sort và chiều sort cho từng view trong `localStorage.atlasViewSortPreferences`. Chuyển view hoặc khởi động lại renderer khôi phục thứ tự đã lưu; dữ liệu thiếu/hỏng trở về mặc định `name/asc`.
+- Browse dùng sort phía server riêng, không ghi đè hai lựa chọn này. Mọi filter sidebar dùng cùng luồng cập nhật của `App`.
+- Mã: `src/utils/viewSortPreferences.js`, `src/App.jsx`, `src/hooks/useFilters.js`.
+- Kiểm chứng: `tests/view-sort-preferences.test.js`.
+
+### F12 — Ẩn game của collection khỏi Library chính
+
+- Checkbox chuột phải của collection lưu `hide_from_library`; thành viên bị ẩn chỉ khỏi Library chính. Game vẫn được cài và vẫn hiện khi mở collection chứa nó, kể cả một collection khác cùng chứa game đó.
+- Thay đổi membership tự áp dụng quy tắc ẩn; không sao chép cờ lên từng game. Xóa collection chỉ xóa nhóm và membership, không xóa game.
+- Mã: `electron/db/collections.js`, `electron/ipc/windows.js`, `src/components/collections/collectionMenu.js`, `src/hooks/useCollections.js`, `src/hooks/useFilters.js`, `src/App.jsx`.
+- Kiểm chứng: `tests/collections-logic.test.js`, `tests/context-action-result.test.js`.
+
+### F13 — Creator folders theo collection và xem trước đích cài
+
+- `group_by_creator` mặc định tắt; collection bật tùy chọn dùng `{creator}/{title}/{version}` cho lần cài/import tiếp theo. Membership hiện có hoặc collection đang chọn đều được xét; collection thường giữ cấu trúc Library toàn cục.
+- Download install, import từ catalog/local, batch importer và preview đích dùng chung `resolveLibraryFolderStructure`. Chọn collection để xem trước không tự tạo membership; đổi tùy chọn không tự di chuyển thư mục game đã cài.
+- Mã: `electron/db/collections.js`, `electron/ipc/collections.js`, `electron/ipc/importer.js`, `electron/ipc/windows.js`, `electron/preload.js`, `src/components/library/LibraryDestination.jsx`, các form collection/install/import và `src/App.jsx`.
+- Kiểm chứng: `tests/collection-folder-layout.test.js` (SQLite thật và wiring các đường cài/import), `tests/library-destination.test.jsx`.
+
+### F14 — Ưu tiên banner đã tải nhưng giữ fallback
+
+- Banner custom luôn thắng. Ở chế độ `download`, banner tải về có file thật được ưu tiên nhưng vẫn giữ candidate remote theo thứ tự nguồn để renderer fallback khi cần.
+- Giữ kiểm tra file tồn tại của Nightly; không ghim vào file đã mất. Không thay chuỗi fallback của Fork bằng danh sách chỉ có một banner tải về.
+- Mã: `electron/db/mediaSources.js`, `electron/ipc/games.js`.
+- Kiểm chứng: `tests/downloaded-banner-preference.test.js`, `scripts/check-steam-local-media-sources.js`.
+
+### F15 — Windows game cần quyền administrator
+
+- Chờ sự kiện `spawn` trước khi báo launch thành công. Khi Windows từ chối EXE bằng `EACCES`, dùng `shell.openPath` để Windows hiện UAC; launch thường vẫn theo dõi child process.
+- Lỗi launch được trả về và hiện trong modal của trang chi tiết. Launch được nâng quyền dùng play session không gắn child process, không coi đây là phép kiểm chứng theo dõi process nâng quyền đầy đủ.
+- Mã: `electron/ipc/games.js`, `src/components/detail/GameDetailPage.jsx`.
+- Kiểm chứng: `tests/game-launch.test.js`; chưa thử UAC/game thật trong lần sync này.
+
+### F16 — Wishlist có dữ liệu sort ngày và metrics đầy đủ
+
+- Hydrate ngày cập nhật F95/LewdCorner cùng likes, views và hai community rating từ catalog trước khi sort; không fallback sang tên chỉ vì record Wishlist thiếu các cột này.
+- So sánh metrics dùng giá trị lớn hơn giữa F95/LewdCorner như Library/Browse; vẫn giữ rating từng nguồn để hiển thị. Normalize nhận cả tên cột SQL và tên field renderer.
+- Mã: `electron/db/wishlist.js`, `src/hooks/useFilters.js`.
+- Kiểm chứng: `tests/wishlist-sort.test.js` (hydrate qua SQLite, chiều sort, dữ liệu LC và parity với catalog).
+
+### F17 — Last Updated trong Details
+
+- Hiển thị ngày cập nhật nguồn tách biệt Release Date cho Library/Wishlist/Browse. Chấp nhận ngày F95, LC, timestamp giây/mili giây; không tự dùng ngày phát hành Steam thay cho ngày cập nhật.
+- Mã: `src/components/detail/GameDetailPage.jsx`, `src/hooks/useFilters.js`.
+- Kiểm chứng: `tests/detail-last-updated.test.jsx`.
+
+### F18 — Minimize to tray và dừng media khi ẩn
+
+- `Interface.minimizeToTray` mặc định tắt, áp dụng ngay khi lưu. Khi bật, minimize ẩn main window nhưng giữ background tasks; tray có Open Atlas/Exit. Nút đóng vẫn thoát Atlas theo luồng cũ.
+- Trì hoãn `hide()` đến sau native minimize dispatch; hủy hide cũ nếu restore/quit/close xảy ra. Restore gọi `show()` rồi focus kể cả khi native restore đã báo visible; cleanup không đọc `webContents` đã bị hủy.
+- Đồng bộ trạng thái visible qua preload, pause video khi ẩn và tháo iframe trailer; hiện lại không tự phát tiếp trailer vừa bị ngắt.
+- Mã: `electron/mainWindowTray.js`, `electron/main.js`, `electron/ipc/settings.js`, `electron/preload.js`, `src/App.jsx`, `src/components/settings/Interface.jsx`, `src/utils/windowMedia.js`, `src/components/detail/page/PreviewLightbox.jsx`, `src/assets/css/main.css`.
+- Kiểm chứng: `tests/main-window-tray.test.js`, `tests/interface-tray.test.jsx`, `tests/window-media.test.js`, `tests/preview-tray.test.jsx`. Các test mock native boundary; chưa thao tác tray trên app đã cài trong lần này.
+
+### F19 — Điều khiển đúng cửa sổ và Show Atlas
+
+- Caption IPC lấy `BrowserWindow.fromWebContents(event.sender)` để minimize/maximize/close đúng cửa sổ gửi. Preload hỏi state ban đầu, bỏ phản hồi cũ nếu đã có native event mới và trả hàm hủy listener.
+- Extension Show Atlas dùng getter main window còn sống, không dùng cửa sổ đầu tiên từ `getAllWindows`; main window thiếu/đã đóng trả HTTP 503. Giữ wiring ở startup và cả hai đường restart server.
+- Mã: `electron/ipc/windows.js`, `electron/preload.js`, `electron/rpc/extensionServer.js`, `electron/ipc/extension.js`, `electron/main.js`.
+- Kiểm chứng: `tests/window-controls.test.js`, `tests/extension-window-routing.test.js`. Không mở rộng preload bridge hay allowlist trong lần sync này.
 
 ## 3. Checklist khi Nightly có bản mới
 
@@ -119,7 +194,7 @@ git fetch upstream nightly
 git merge --no-commit --no-ff upstream/nightly
 ```
 
-4. Đọc diff và giải quyết conflict theo F01–F10; không chọn toàn bộ “theirs”/“ours”. Không dùng `reset --hard`, force-push hoặc thay toàn bộ branch bằng Nightly để đồng bộ. Dòng GitHub so sánh với `main` không phải lý do để merge `main`.
+4. Đọc diff và giải quyết conflict theo F01–F19, đối chiếu hành vi bằng code/test thay vì bắt buộc giữ triển khai cũ. Có thể dùng triển khai Nightly nếu đáp ứng đầy đủ ràng buộc tương ứng; ghi rõ phần giữ/thay thế và giới hạn kiểm chứng. Không chọn toàn bộ “theirs”/“ours”, dùng `reset --hard`, rebase lịch sử đã push hay force-push. Dòng GitHub so sánh với `main` không phải lý do để merge `main`.
 5. Chạy test và build kiểm tra:
 
 ```powershell
@@ -204,9 +279,35 @@ Kiểm chứng: regression test được chạy đỏ trước fix rồi xanh sa
 
 Thêm một dòng sau mỗi lần tích hợp; giữ các mốc cũ để truy vết.
 
-| Ngày | Nightly tag / SHA | Fork SHA / release | F01–F09 | Check / runtime | Kết quả và vấn đề còn lại |
+| Ngày | Nightly tag / SHA | Fork SHA / release | Phạm vi tính năng | Check / runtime | Kết quả và vấn đề còn lại |
 | --- | --- | --- | --- | --- | --- |
 | 03/09/2026 | Baseline `cd8ad077`; thông báo đã ghi nhận `v0.9.9-nightly.494` | `fa50638` / `.2`; đang cài `.1 local` | Đã kiểm chứng theo mục 4 | Check PASS; runtime `.1` PASS | `.2` đã phát hành, chưa cài trong mốc này |
 | 02/10/2026 | `v0.9.10-nightly.503` / `56ad0d4` | Local source sync; nền `0.9.10` | Giữ nguyên diff của 43 file tùy biến; regression PASS | `npm run check` PASS: 144 files, 1.548 passed, 7 skipped; renderer build PASS | Cherry-pick 9 first-parent deltas vào Fork; build và cài local từ commit tích hợp này. |
+| 04/11/2026 | `0.9.15-nightly.518` / `464cdc0468f53d91a27b15f2d7ea6d97647ef262` | Merge commit chứa note này; parents `6f3bd03` + `464cdc0` | F01–F19 giữ hành vi; dùng các sửa Browse/delete/LC và modal của Nightly theo mục 7 | Check PASS: 197 files, 1.993 passed, 7 skipped; runtime chưa thử | PARTIAL ở mức bản cài; merge thường, không viết lại lịch sử đã push |
 
 Khi thêm tùy biến: ghi mã F mới, hành vi cần giữ, file/test, commit và bằng chứng; không xóa mục cũ chỉ vì upstream thay cấu trúc file.
+
+## 7. Đối chiếu tích hợp ngày 04/11/2026
+
+### Quyết định giữ và dùng triển khai Nightly
+
+| Vùng | Kết quả đối chiếu source/test |
+| --- | --- |
+| F01–F08: update, build, release và dữ liệu | Giữ các đường Fork, feed/manifest riêng, cảnh báo chuyển kênh và thông báo upstream độc lập. Nâng version nền theo Nightly lên `0.9.15`; không đổi dependency hay lockfile. |
+| F09–F10, F14: media | Giữ deadline 30 giây, một request cho mỗi URL lỗi trong lượt xử lý, missing-only theo từng file, ảnh local và fallback; không thêm lượt tải khi promote. Dùng modal Nightly cho cảnh báo ảnh lỗi của Fork. |
+| F11–F13, F16–F17: sort, collection, Details | Giữ sort độc lập, collection ẩn/creator folders, hydrate Wishlist metrics/ngày và Last Updated. Sửa Browse của Nightly chỉ áp dụng SQL Browse, không thay comparator hoặc sở thích sort riêng. |
+| F15, F18–F19: launch, tray, cửa sổ | Giữ fallback UAC, báo lỗi launch, vòng đời tray, pause media và định tuyến đúng cửa sổ. |
+| Browse ngày | Nhận triển khai Nightly: custom range có thể chỉ có một cận; index/union dùng cùng fallback ngày release/update/published khi lọc và sort. Test: `tests/browse-date-filter.test.js`. |
+| Xóa game và orphan | Nhận cleanup/broadcast Nightly cho `downloads`, `collection_games`, `preview_sort`, `gog_mappings`, `media_source_cache`, làm mới install state của catalog; startup sweep/audit đi cùng. Test: `tests/delete-game-completely.test.js`, `tests/delete-game-broadcast.test.js`, `tests/orphan-sweep.test.js`. Chỉ thử trên fixture/database tạm. |
+| LewdCorner tier | Nhận cấu hình site đi kèm release trong `electron/config/lcTier.json`; sanitizer bỏ các URL/selector cũ trong config người dùng. Giữ các tùy chọn hành vi như `lcThreadProbeEnabled` và cache tier. Test: `tests/lewdcorner-tier-detection.test.js`, `tests/config-sanitize-migration.test.js`; chưa đăng nhập/thử site thật. |
+| Changelog | Giữ bố cục Stable/Nightly/Legacy mới của upstream. Chuyển đủ 11 entry riêng của Fork từ phần Unreleased cũ sang `NIGHTLY.CHANGELOG.md` → Fork — unreleased; không bỏ lịch sử tùy biến. |
+
+### Bằng chứng và phần chưa kiểm tra
+
+- **PASS — regression đỏ/xanh:** thêm `tests/detail-dialogs.test.jsx` trước khi sửa; cả hai test thất bại đúng lý do: cảnh báo media còn native-only và Esc rời trang dù modal xác nhận mở. Sau hai dòng sửa trong `GameDetailPage.jsx`, cả hai test đạt; nội dung/số lỗi của Fork vẫn hiển thị và có thể đóng bằng OK.
+- **PASS — cài dependency:** `npm ci`, Node `v22.20.0`, npm `10.9.3`; lockfile không đổi. npm báo **42 dependency advisories (25 moderate, 15 high, 2 critical)** trên dependency hiện tại; chưa nâng/sửa dependency trong phạm vi sync.
+- **PASS — full gate:** `npm run check`, exit 0: **197 test files, 1.993 tests passed, 7 skipped**, lint **0 errors / 68 warnings**, contract scripts và renderer build đạt. Hai regression mới nằm trong tổng này. Sau gate chỉ cập nhật tài liệu; đối chiếu lại `git diff --check` và `git diff --cached --check`, bỏ khoảng trắng cuối dòng tại 4 dòng của `LEGACY.CHANGELOG.md` mới nhận từ upstream để staged diff cũng đạt.
+- **PASS — phạm vi giữ riêng:** 65 đường dẫn source/test/config khác Nightly nhưng không nằm trong thay đổi incoming vẫn nguyên nội dung so với fork trước merge. Các vùng giao nhau (`configSchema`, game IPC, main, Details, package) đã đọc diff riêng và giữ các nhánh tùy biến; đường dẫn source/test trong note đã kiểm tra tồn tại. Test và source không thay thế kiểm chứng runtime.
+- **PARTIAL — runtime:** chưa build/cài Windows installer, chưa chạy app đã cài, chưa thử updater/UAC/tray/extension bằng app thật, chưa download/media qua CDN hoặc đăng nhập LC thật, chưa đối chiếu database cá nhân sau nâng cấp. Không sửa dữ liệu tại `D:\Tools\Atlas\data`; test tự động không chứng minh các luồng runtime này.
+- `.codex/` có sẵn và các checkpoint/log trong `scratch/fork-sync-20261104/` nằm ngoài commit. Commit/push chỉ nhắm `origin/fork`, không tạo PR hay push upstream.
+- AI assistance: **Codex (GPT-6)** giải quyết changelog, sửa hai dòng tích hợp UI, viết regression test và cập nhật note; code Nightly còn lại được merge từ lịch sử upstream. Người dùng vẫn cần kiểm tra runtime ở trên trước khi coi bản cài mới đã được xác nhận.
