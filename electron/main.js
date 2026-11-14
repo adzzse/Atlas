@@ -1506,6 +1506,11 @@ function createWindow() {
   }
   mainWindow.on('maximize', () => mainWindow.webContents.send('window-state-changed', 'maximized'))
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window-state-changed', 'normal'))
+  // React owns view history; native mouse commands must not navigate/reload the renderer URL.
+  mainWindow.on('app-command', (event, command) => {
+    if (command === 'browser-backward') mainWindow.webContents.send('navigate-history', 'back')
+    else if (command === 'browser-forward') mainWindow.webContents.send('navigate-history', 'forward')
+  })
   mainWindow.on('close', (e) => {
     if (isQuitting) return
     e.preventDefault()

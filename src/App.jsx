@@ -42,6 +42,7 @@ import { DEFAULT_SEARCH_FIELD_IDS, normalizeSearchFieldIds } from './utils/searc
 import { resolveMetadataSearch, resolveSearchTarget } from './utils/metadataSearch.js'
 import { useAppUpdate } from './hooks/useAppUpdate.js'
 import { useWindowState } from './hooks/useWindowState.js'
+import { useMouseNavigation } from './hooks/useMouseNavigation.js'
 import { useTheme } from './theme/ThemeProvider.jsx'
 import { useBannerTemplate } from './theme/BannerTemplateProvider.jsx'
 import { getGameTitle, normalizeGameForRenderer } from './utils/gameDisplay.js'
@@ -917,8 +918,11 @@ const App = () => {
       .then((updatedGame) => {
         const normalizedGame = normalizeGameForRenderer(updatedGame)
         if (normalizedGame) {
-          setShowSearchSidebar(false)
-          setSelectedGame(localRecordId
+          setSelectedGame((current) => {
+            // A late fetch must not reopen detail after Back or replace a newer selection.
+            if (!current || current.record_id !== selected.record_id ||
+                getWishlistIdentityKey(current) !== getWishlistIdentityKey(selected)) return current
+            return localRecordId
             ? {
                 ...normalizedGame,
                 isWishlisted: selected.isWishlisted === true,
@@ -927,7 +931,8 @@ const App = () => {
                 lc_id: normalizedGame.lc_id ?? selected.lc_id,
                 steam_id: normalizedGame.steam_id ?? selected.steam_id,
               }
-            : (withWishlistStates([normalizedGame], wishlistIdentityKeys)[0] || normalizedGame))
+            : (withWishlistStates([normalizedGame], wishlistIdentityKeys)[0] || normalizedGame)
+          })
         }
       })
       .catch((error) =>
@@ -2077,6 +2082,35 @@ const App = () => {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedGame, goBackToLibrary])
+
+  // Restore view state without replaying nav actions that reset filters or write preferences.
+  const restoreNavigation = useCallback((view) => {
+    const mode = view.libraryMode === 'catalog' && !browseAvailable ? 'local' : view.libraryMode
+    setLibraryMode(mode)
+    setLibraryView(mode === view.libraryMode ? view.libraryView : 'grid')
+    setSidebarMode(normalizeSidePanelMode(view.sidebarMode, undefined, browseAvailable))
+    setActiveSavedFilterId(view.activeSavedFilterId)
+    setShowSearchSidebar(view.showSearchSidebar)
+    handleFilterChange(view.activeFilters)
+    pendingLibraryScrollTopRestoreRef.current = libraryScrollTopRef.current || 0
+    const game = view.selectedGame?.isMetadataOnly
+      ? view.selectedGame
+      : gamesByRecordId.get(Number(view.selectedGame?.record_id))
+    if (game && mode === view.libraryMode) selectGame(game)
+    else setSelectedGame(null)
+  }, [browseAvailable, gamesByRecordId, handleFilterChange, selectGame])
+
+  const selectedRecordId = selectedGame?.isMetadataOnly
+    ? getLocalRecordIdForCatalogRow(selectedGame)
+    : selectedGame?.record_id
+  useMouseNavigation(
+    JSON.stringify([
+      libraryMode, libraryView, activeSavedFilterId, activeFilters.collectionIds,
+      selectedGame ? selectedRecordId || getWishlistIdentityKey(selectedGame) : null,
+    ]),
+    { selectedGame, libraryMode, libraryView, sidebarMode, activeSavedFilterId, activeFilters, showSearchSidebar },
+    restoreNavigation,
+  )
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (

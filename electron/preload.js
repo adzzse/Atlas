@@ -76,6 +76,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     console.log("Invoking closeWindow");
     return ipcRenderer.invoke("close-window");
   },
+  // Only the main window emits these commands; cleanup must preserve other subscribers.
+  onNavigateHistory: (callback) => {
+    const handler = (event, direction) => callback(direction);
+    ipcRenderer.on("navigate-history", handler);
+    return () => ipcRenderer.removeListener("navigate-history", handler);
+  },
   selectFile: () => {
     console.log("Invoking selectFile");
     return ipcRenderer.invoke("select-file");

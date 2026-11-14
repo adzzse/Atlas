@@ -93,6 +93,9 @@ export default function PreviewLightbox({ previews, lightboxIndex, onClose, onPr
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Media preview"
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
