@@ -9,6 +9,7 @@ the release it heads to; earlier labels mix the cycle and the candidate, as
 ## Fork — unreleased
 
 ### Fixed
+- Fork builds fetch the nightly site-scraping config while keeping the personal binary update feed.
 - Detail-page partial media refresh warnings use the in-app dialog while keeping failure details, and Escape cannot leave the page through an open confirmation.
 - Window controls now target their requesting window, the extension's Show Atlas action resolves the live main window, and maximize/restore icons resync from native state after renderer reloads.
 - Restoring from tray now explicitly shows the window even when native restore already reports it visible, restoring renderer input, resize layout and caption controls.
@@ -23,6 +24,34 @@ the release it heads to; earlier labels mix the cycle and the candidate, as
 - Optional Minimize to tray keeps Atlas and its background tasks running, with Open Atlas/Exit tray actions and paused hidden-window videos. Closing Atlas still exits.
 - Collections can opt into creator folders for future installs/imports. Install and import forms can select a collection and preview the destination; other games keep the configured library structure.
 - Collections can now hide their member games from the main Library through a right-click checkbox. Hidden members remain installed and still appear when any containing collection is opened.
+
+## 0.9.5-nightly.524
+
+- **fix**: F95 captcha detection now looks for the hCaptcha container the gate page owns. The old check read inside hCaptcha's iframe, which a page script cannot reach. It never fired.
+- **fix**: after the resolver hands the window over for a captcha, a failed-check reload no longer restarts the auto-clicking, and the resolver window no longer opens a DevTools console over the page.
+- **feat**: New "Do not auto-resolve masked link" toggle in Settings > Accounts, right below "Do not hide resolve window". When on, the resolver opens the window and leaves every click to you, with a 5-minute window to finish.
+
+## 0.9.5-nightly.523
+
+- **fix**: F95 download gate no longer auto-clicks when a captcha is present. The window opens so you can solve it, with a 5-minute window to do so.
+
+## 0.9.5-nightly.522
+
+- **feat**: New "Do not hide resolve window" toggle in Settings > Accounts. When on, the resolve window stays open so you can watch it and step in if it stalls.
+- **changed**: Stuck link resolves now time out in 2 minutes instead of 5.
+
+## 0.9.5-nightly.521
+- **enhancement**: improve LewdCorner account membership checking stability.
+
+## 0.9.5-nightly.520
+
+- **fix**: LewdCorner account check regex change due to site change (#474).
+
+## 0.9.5-nightly.519
+
+- **fix**: F95 or LewdCorner previews now display correctly in Download mode when F95/LC is set as the priority source. We previously add a new table for f95zone/LC screens for both Stream and Download modes (seem to be empty), but only Stream mode had a fallback to the old screen data when the new data is empty — Download mode does not and will fail f95/LC and fallback to Steam instead -> this change will fix this behavior (#467).
+- **fix**: LewdCorner account check regex change due to site change (#469).
+
 
 ## 0.9.15-nightly.518
 

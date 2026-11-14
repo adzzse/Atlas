@@ -1,8 +1,16 @@
 # Change note
 
-Sổ theo dõi tùy biến của `adzzse/Atlas`, lập ngày **03/09/2026**, cập nhật theo code/test ngày **04/11/2026**. Dùng để đối chiếu sau mỗi lần đưa thay đổi từ Nightly gốc vào Fork; không thay thế `CHANGELOG.md` và `NIGHTLY.CHANGELOG.md` của upstream.
+Sổ theo dõi tùy biến của `adzzse/Atlas`, lập ngày **03/09/2026**, cập nhật theo code/test ngày **14/11/2026**. Dùng để đối chiếu sau mỗi lần đưa thay đổi từ Nightly gốc vào Fork; không thay thế `CHANGELOG.md` và `NIGHTLY.CHANGELOG.md` của upstream.
 
 ## 1. Trạng thái source và mốc lịch sử
+
+### Source đối chiếu ngày 14/11/2026
+
+- Fork trước merge: `1e1f1b590e0fdd0ab0f38e246eaa41d14d45aaa4`, bằng `origin/fork` sau fetch; merge base `464cdc0468f53d91a27b15f2d7ea6d97647ef262`.
+- Target đã chốt: `upstream/nightly` tại `a2d71982c2355640aedce76c4054b4c8a5ad38a6`, có 15 commit mới. Fork trước merge ahead/behind target là **20/15**, local so với `origin/fork` là **0/0**. Giữ lịch sử đã publish bằng merge thường hai parent; không merge `main`.
+- Version nền vẫn `0.9.15`; lockfile không đổi. Các heading `.519`–`.524` mới của changelog upstream ghi `0.9.5`; giữ nguyên nhãn upstream và dùng SHA ở trên làm định danh tích hợp.
+- Commit chứa note này có parent thứ nhất `1e1f1b5`, parent thứ hai `a2d7198`. Kết quả source/test và quyết định tính năng ở mục 8; kết quả push/release được đối chiếu theo commit đó sau khi giao.
+- Không cài binary, không thay app đang chạy, không sửa `D:\Tools\Atlas\data`; các mốc installed/runtime cũ bên dưới là lịch sử.
 
 ### Source đối chiếu ngày 04/11/2026
 
@@ -284,6 +292,7 @@ Thêm một dòng sau mỗi lần tích hợp; giữ các mốc cũ để truy v
 | 03/09/2026 | Baseline `cd8ad077`; thông báo đã ghi nhận `v0.9.9-nightly.494` | `fa50638` / `.2`; đang cài `.1 local` | Đã kiểm chứng theo mục 4 | Check PASS; runtime `.1` PASS | `.2` đã phát hành, chưa cài trong mốc này |
 | 02/10/2026 | `v0.9.10-nightly.503` / `56ad0d4` | Local source sync; nền `0.9.10` | Giữ nguyên diff của 43 file tùy biến; regression PASS | `npm run check` PASS: 144 files, 1.548 passed, 7 skipped; renderer build PASS | Cherry-pick 9 first-parent deltas vào Fork; build và cài local từ commit tích hợp này. |
 | 04/11/2026 | `0.9.15-nightly.518` / `464cdc0468f53d91a27b15f2d7ea6d97647ef262` | Merge commit chứa note này; parents `6f3bd03` + `464cdc0` | F01–F19 giữ hành vi; dùng các sửa Browse/delete/LC và modal của Nightly theo mục 7 | Check PASS: 197 files, 1.993 passed, 7 skipped; runtime chưa thử | PARTIAL ở mức bản cài; merge thường, không viết lại lịch sử đã push |
+| 14/11/2026 | SHA `a2d71982c2355640aedce76c4054b4c8a5ad38a6`; nền `0.9.15` | Merge chứa note này; parents `1e1f1b5` + `a2d7198` | Giữ F01–F19, nhận sửa LC/resolver/media, ánh xạ cấu hình LC cho Fork theo mục 8 | Check PASS: 202 files, 2.048 passed/7 skipped; focused 20 files/197 tests PASS; runtime chưa thử | Merge thường; không cài app hay sửa dữ liệu cá nhân |
 
 Khi thêm tùy biến: ghi mã F mới, hành vi cần giữ, file/test, commit và bằng chứng; không xóa mục cũ chỉ vì upstream thay cấu trúc file.
 
@@ -311,3 +320,23 @@ Khi thêm tùy biến: ghi mã F mới, hành vi cần giữ, file/test, commit 
 - **PARTIAL — runtime:** chưa build/cài Windows installer, chưa chạy app đã cài, chưa thử updater/UAC/tray/extension bằng app thật, chưa download/media qua CDN hoặc đăng nhập LC thật, chưa đối chiếu database cá nhân sau nâng cấp. Không sửa dữ liệu tại `D:\Tools\Atlas\data`; test tự động không chứng minh các luồng runtime này.
 - `.codex/` có sẵn và các checkpoint/log trong `scratch/fork-sync-20261104/` nằm ngoài commit. Commit/push chỉ nhắm `origin/fork`, không tạo PR hay push upstream.
 - AI assistance: **Codex (GPT-6)** giải quyết changelog, sửa hai dòng tích hợp UI, viết regression test và cập nhật note; code Nightly còn lại được merge từ lịch sử upstream. Người dùng vẫn cần kiểm tra runtime ở trên trước khi coi bản cài mới đã được xác nhận.
+
+## 8. Đối chiếu tích hợp ngày 14/11/2026
+
+| Vùng / yêu cầu | Upstream overlap và quyết định | Bằng chứng liên quan |
+| --- | --- | --- |
+| F01–F08: Fork update/build/release/dữ liệu | **Giữ** feed `adzzse/Atlas`, ba kênh và baseline riêng, cảnh báo đổi kênh, thông báo Nightly độc lập, build identity và workflow Fork. `configSchema`/`main` nhận cấu hình Resolve và thay đổi LC nhưng vẫn giữ các nhánh Fork. Nguồn catalog và đường dữ liệu không đổi. | `fork-updates`, `fork-update-settings`, `fork-update-ui`, `fork-release-workflow`, `upstream-nightly`, `release-url`. |
+| F09–F10, F14: media | **Kết hợp**: nhận `getRemotePreviewUrls` merge screens legacy F95/LC vào source selection cả khi có Steam; giữ một request cho URL lỗi, deadline 30 giây, missing-only theo file, hook promote không tải lặp, local banner và remote fallback. | `preview-content-dedupe`, `media-download-resilience`, `wishlist-download-media`, `downloaded-banner-preference`. |
+| F11–F13, F16–F17: sort/collections/Details | **Giữ** sort độc lập và hydrate Wishlist, ẩn game collection, creator folders và Last Updated. Upstream không thay các đường source/test này trong target. | Các regression đã có trong mục F tương ứng; nội dung các file không nằm trong incoming diff giữ nguyên. |
+| F15, F18–F19: launch/tray/window | **Giữ** UAC fallback, vòng đời tray/pause media và định tuyến cửa sổ; main chỉ nhận thay đổi khối LC, không thay các nhánh tray/update/extension của Fork. | `game-launch`, `main-window-tray`, `interface-tray`, `window-media`, `preview-tray`, `window-controls`, `extension-window-routing`. Native runtime chưa thử. |
+| LC account và site config | **Nhận** pipeline homepage → rank card → thread fallback, reset tier khi relink/refresh cookie, cache 30 ngày và cấu hình từ xa có bundled fallback. **Kết hợp cho Fork**: `fetchRemoteConfig('fork', ...)` dùng thư mục `nightly`, vì nguồn config `codeon89/Atlas-Patched` branch `atlas-client-configs` chỉ có `nightly/stable`; không đổi feed cập nhật binary. | `lewdcorner-tier-detection`, `lcTierChecks`, `accounts-lc-tier-reset`, `config-sanitize-migration`. Ba regression fork/nightly/stable kiểm tra URL fetch và config nhận được. |
+| Resolve window | **Nhận** tùy chọn hiện cửa sổ/manual resolve, dừng auto-click khi gặp captcha hoặc click-loop, giữ handover qua reload và timeout tự động 2 phút/manual 5 phút. Các giá trị mặc định mới không làm mất tùy chọn Fork. | `accounts-resolve-window`, `downloads-resolve-site`, `resolve-config-default`, `resolver-idle-reveal`, `resolver-timeout`. Không thử site/captcha thật. |
+| Changelog | **Kết hợp** cả phần Fork — unreleased và sáu mục nightly mới; chỉ xung đột văn bản tại file này. Thêm ghi chú sửa đường config cho Fork. | Không chọn toàn bộ ours/theirs; các entry tùy biến cũ vẫn giữ. |
+
+- **PASS — regression đỏ/xanh:** trước sửa, test `fork builds fetch the nightly site config` thất bại vì request `/fork/lcTier.json`, trong khi stable/nightly đã đúng. Sau thêm ánh xạ hai dòng trong module config dùng chung, focused suite đạt **20 files/197 tests**, gồm LC/resolver/media và Fork update/tray/window.
+- **PASS — full gate:** `npm run check` exit 0: lint (0 errors, 68 warnings), toàn bộ contract scripts, **202 test files, 2.048 passed/7 skipped**, renderer build. `git diff --check` và `git diff --cached --check` PASS; warning có sẵn không được coi là đã sửa.
+- **PASS — bảo toàn diff:** 69 đường dẫn source/test/config tùy biến ngoài incoming diff vẫn nguyên so với fork trước merge; chỉ ba đường giao nhau là `NIGHTLY.CHANGELOG.md`, `electron/config/configSchema.js`, `electron/main.js` đã đối chiếu riêng. Giữ CRLF và lockfile. Không có merge conflict còn lại.
+- **Dependency:** `npm ci` PASS với Node `22.20.0`, npm `10.9.3`; SQLite/sharp load được. npm báo 28 advisories (11 moderate, 15 high, 2 critical) trên lockfile không đổi; chưa nâng dependency trong lần sync này.
+- **PARTIAL — runtime:** chưa thử app/installer/updater, UAC, tray/input/focus, extension UI, catalog/media/CDN hoặc LC/F95 thật. Test SQLite dùng fixture tạm; không tác động database/tài khoản cá nhân. Cấu hình LC từ xa phụ thuộc nguồn của upstream và giữ bundled fallback khi fetch lỗi.
+- Checkpoint, process logs, script kiểm tra trong `.codex/task-state/nightly-sync-20261114/` và graph code-only `graphify-out/` nằm ngoài commit. Chỉ giao `origin/fork`, không push upstream.
+- AI assistance: **Codex (GPT-6)** giải quyết changelog, thêm hai dòng ánh xạ config với ba trường hợp regression và cập nhật note. Code incoming còn lại được merge từ upstream; source/test không thay thế kiểm tra runtime trên bản cài.
