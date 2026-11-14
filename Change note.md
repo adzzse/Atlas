@@ -340,3 +340,11 @@ Khi thêm tùy biến: ghi mã F mới, hành vi cần giữ, file/test, commit 
 - **PARTIAL — runtime:** chưa thử app/installer/updater, UAC, tray/input/focus, extension UI, catalog/media/CDN hoặc LC/F95 thật. Test SQLite dùng fixture tạm; không tác động database/tài khoản cá nhân. Cấu hình LC từ xa phụ thuộc nguồn của upstream và giữ bundled fallback khi fetch lỗi.
 - Checkpoint, process logs, script kiểm tra trong `.codex/task-state/nightly-sync-20261114/` và graph code-only `graphify-out/` nằm ngoài commit. Chỉ giao `origin/fork`, không push upstream.
 - AI assistance: **Codex (GPT-6)** giải quyết changelog, thêm hai dòng ánh xạ config với ba trường hợp regression và cập nhật note. Code incoming còn lại được merge từ upstream; source/test không thay thế kiểm tra runtime trên bản cài.
+
+### CI follow-up sau merge `fc22e4d`
+
+- Run `43614395147` dừng ở `tests/orphan-sweep.test.js`: test đọc trước khi các `DELETE` SQLite bất đồng bộ chạy xong (201 files PASS, 1 FAIL); chưa tạo draft hay upload binary.
+- Harness dùng SQLite thật tái hiện **15/100 lượt lỗi** khi không chờ, **0/100 lỗi** khi chờ `db.wait()`. Startup gọi sweep trong `db.serialize`; lỗi nằm ở lời gọi trực tiếp của test ngoài hàng đợi serialized.
+- Chỉ sửa test đợi SQLite hoàn tất trước khi kiểm tra; giữ nguyên cleanup trong app và các assert xóa orphan/giữ hàng `record_id IS NULL`. Không tăng timeout hoặc bỏ qua test.
+- **PASS — kiểm tra lại:** focused orphan/delete **3 files/7 tests**; full `npm run check` exit 0, **202 files/2.048 passed/7 skipped**, lint 0 errors/68 warnings, renderer build PASS. Review xác nhận `db.wait()` là completion barrier và giữ nguyên các assert; phát hành lại qua commit correction riêng sau merge đã push.
+- AI assistance bổ sung: **Codex (GPT-6)** sửa hai dòng trong `tests/orphan-sweep.test.js` và ghi bằng chứng ở note này; không sửa thêm mã app.

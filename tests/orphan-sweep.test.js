@@ -63,6 +63,8 @@ describe('sweepOrphanedRecords — downloads + media_source_cache', () => {
     // 4. Run the sweep.
     const { sweepOrphanedRecords } = dbIndex
     sweepOrphanedRecords()
+    // The sweep queues async deletes; reads must wait for all of them.
+    await new Promise((resolve) => dbIndex.db.wait(resolve))
 
     // 5. Verify post-sweep: orphans gone, NULL row survives.
     rows = await allAsync('SELECT * FROM downloads WHERE record_id = 999')
