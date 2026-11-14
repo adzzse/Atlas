@@ -21,6 +21,7 @@ the release it heads to; earlier labels mix the cycle and the candidate, as
 - Windows games that require administrator access now fall back to the Windows UAC prompt when direct launch is denied. Launch errors are shown on the detail page instead of silently reporting success.
 
 ### Added
+- Notification center in both header layouts shows full details and actions, with individual/all-read controls and the latest 100 notifications retained across restarts. Popup expiry or dismissal no longer loses the message.
 - Optional Minimize to tray keeps Atlas and its background tasks running, with Open Atlas/Exit tray actions and paused hidden-window videos. Closing Atlas still exits.
 - Collections can opt into creator folders for future installs/imports. Install and import forms can select a collection and preview the destination; other games keep the configured library structure.
 - Collections can now hide their member games from the main Library through a right-click checkbox. Hidden members remain installed and still appear when any containing collection is opened.

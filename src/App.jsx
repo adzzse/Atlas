@@ -31,6 +31,7 @@ import InstallFlowHost from './components/downloads/InstallFlowHost.jsx'
 import LibraryUpdateModal from './components/ui/LibraryUpdateModal.jsx'
 import DownloadsStatus from './components/downloads/DownloadsStatus.jsx'
 import { useToast } from './components/ui/toast/ToastContext.jsx'
+import NotificationCenter from './components/ui/toast/NotificationCenter.jsx'
 import { useGames } from './hooks/useGames.js'
 import {
   defaultFilters, filterGamesWithState, normalizeFilterState, useFilters,
@@ -2181,6 +2182,7 @@ const App = () => {
                 {/* mr clears the custom caption buttons (top-right, ~92px)
                     plus a little breathing room. */}
                 <div className="mt-[14px] mr-[100px] flex items-center gap-3">
+                  <NotificationCenter />
                   <TopNav
                     group="right"
                     forceIconsOnly
@@ -2244,6 +2246,7 @@ const App = () => {
               kept so the welcome tour can still spotlight it. */}
           {!isTopNav && (
             <div className="absolute mt-10 top-0 right-2 flex items-center h-[10px] -webkit-app-region-no-drag">
+              <div className="mr-2"><NotificationCenter /></div>
               <button
                 type="button"
                 onClick={openAbout}

@@ -10,23 +10,24 @@ const VARIANT_META = {
   error: { icon: 'fas fa-circle-exclamation', accent: 'var(--color-danger)' },
 }
 
-function Toast({ toast, onDismiss }) {
+// History uses the same content/actions as popups, without announcing every saved item as new.
+export function Toast({ toast, onDismiss }) {
   const meta = VARIANT_META[toast.variant] || VARIANT_META.info
   const hasProgress = typeof toast.progress === 'number' && toast.progress !== null
   const action = toast.action
 
   return (
     <div
-      role="status"
-      aria-live="polite"
-      className="pointer-events-auto w-[340px] max-w-[calc(100vw-32px)] bg-primary border border-border rounded-buttonTheme shadow-lg overflow-hidden"
+      role={onDismiss ? 'status' : undefined}
+      aria-live={onDismiss ? 'polite' : undefined}
+      className={`pointer-events-auto ${onDismiss ? 'w-[340px] max-w-[calc(100vw-32px)]' : 'w-full'} bg-primary border border-border rounded-buttonTheme shadow-lg overflow-hidden`}
       style={{ borderLeft: `3px solid ${meta.accent}` }}
     >
       <div className="flex items-start gap-2 px-3 py-2">
         <i className={`${meta.icon} mt-[2px] text-[13px]`} style={{ color: meta.accent }} aria-hidden="true"></i>
         <div className="min-w-0 flex-1">
-          {toast.title && <div className="text-[13px] font-semibold text-text truncate">{toast.title}</div>}
-          {toast.message && <div className="text-[12px] text-muted mt-0.5 break-words">{toast.message}</div>}
+          {toast.title && <div className={`text-[13px] font-semibold text-text ${onDismiss ? 'truncate' : 'break-words'}`}>{toast.title}</div>}
+          {toast.message && <div className="text-[12px] text-muted mt-0.5 break-words whitespace-pre-wrap">{toast.message}</div>}
 
           {(action || hasProgress) && (
             <div className="mt-2 flex items-center gap-2">
@@ -53,7 +54,7 @@ function Toast({ toast, onDismiss }) {
           )}
         </div>
 
-        {toast.dismissible !== false && (
+        {onDismiss && toast.dismissible !== false && (
           <button
             onClick={() => onDismiss(toast.id)}
             className="shrink-0 text-muted hover:text-highlight px-1 -mr-1"
