@@ -285,6 +285,7 @@ export const normalizeFieldConditions = (conditions = {}) => ({
   uninstalledOnly: conditions.uninstalledOnly === true,
   updateOnly: conditions.updateOnly === true,
   favoriteOnly: conditions.favoriteOnly === true,
+  visualNovelOnly: conditions.visualNovelOnly === true,
   source: Array.isArray(conditions.source)
     ? conditions.source.map((source) => String(source).toLowerCase()).filter((source) => sourceConditionSet.has(source))
     : [],

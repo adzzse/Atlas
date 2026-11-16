@@ -220,6 +220,12 @@ const BannerField = ({ field, game, index, inPanel = false, onOpenUpdate = null 
   if (!resolved.visible) return null
   if (field.hideWhenEmpty && isEmptyValue(resolved.value)) return null
 
+  // Category may fall back to Steam features even on a game linked to F95.
+  if (field.id === 'category' && field.conditions?.visualNovelOnly === true) {
+    if (!/^(?:vn|visual novel)$/i.test(String(resolved.value).trim())) return null
+    resolved.value = 'VN'
+  }
+
   const fontSize = normalizeFontSize(field.fontSize, field.badge ? 10 : 12)
   // Per-field pixel nudge (offsetX/offsetY) applied as a transform so it shifts
   // the field visually without disturbing slot/row layout.

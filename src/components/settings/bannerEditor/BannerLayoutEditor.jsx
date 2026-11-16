@@ -324,6 +324,12 @@ function Inspector({
             <input type="checkbox" checked={field.hideWhenEmpty === true} onChange={(e) => onFieldChange(field.id, { hideWhenEmpty: e.target.checked })} />
             Hide when empty
           </label>
+          {field.id === 'category' && (
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={field.conditions?.visualNovelOnly === true} onChange={(e) => updateConditions({ visualNovelOnly: e.target.checked })} />
+              Visual novels only (VN)
+            </label>
+          )}
           {[
             ['localOnly', 'Local only'],
             ...(BROWSE_MODE_ENABLED ? [['browseOnly', 'Browse only']] : []),
