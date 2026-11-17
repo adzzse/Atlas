@@ -9,6 +9,7 @@ the release it heads to; earlier labels mix the cycle and the candidate, as
 ## Fork — unreleased
 
 ### Fixed
+- Mouse Back/Forward buttons now work over the main window's web content, where Chromium delivers side-button mouse events without an app command.
 - Fork builds fetch the nightly site-scraping config while keeping the personal binary update feed.
 - Detail-page partial media refresh warnings use the in-app dialog while keeping failure details, and Escape cannot leave the page through an open confirmation.
 - Window controls now target their requesting window, the extension's Show Atlas action resolves the live main window, and maximize/restore icons resync from native state after renderer reloads.

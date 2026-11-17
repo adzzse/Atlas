@@ -1506,6 +1506,12 @@ function createWindow() {
   }
   mainWindow.on('maximize', () => mainWindow.webContents.send('window-state-changed', 'maximized'))
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window-state-changed', 'normal'))
+  // Chromium delivers side buttons over web content without emitting app-command.
+  mainWindow.webContents.on('before-mouse-event', (event, mouse) => {
+    if (mouse.button !== 'back' && mouse.button !== 'forward') return
+    event.preventDefault()
+    if (mouse.type === 'mouseUp') mainWindow.webContents.send('navigate-history', mouse.button)
+  })
   // React owns view history; native mouse commands must not navigate/reload the renderer URL.
   mainWindow.on('app-command', (event, command) => {
     if (command === 'browser-backward') mainWindow.webContents.send('navigate-history', 'back')

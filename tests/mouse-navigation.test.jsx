@@ -129,6 +129,28 @@ it('forwards only native Back/Forward commands to the main renderer', () => {
   ])
 })
 
+// Windows Chromium can deliver MB4/MB5 directly without emitting an app-command.
+it.each(['back', 'forward'])('handles the native %s mouse button exactly once on release', (button) => {
+  const source = fs.readFileSync(path.join(__dirname, '../electron/main.js'), 'utf8')
+  const registration = source.match(/mainWindow\.webContents\.on\('before-mouse-event',[\s\S]*?\n  \}\)/)
+  expect(registration).not.toBeNull()
+  const webContents = Object.assign(new EventEmitter(), { send: vi.fn() })
+  vm.runInNewContext(registration[0], { mainWindow: { webContents } })
+  for (const type of ['mouseDown', 'mouseUp']) {
+    const event = { preventDefault: vi.fn() }
+    webContents.emit('before-mouse-event', event, { type, button })
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    if (type === 'mouseDown') expect(webContents.send).not.toHaveBeenCalled()
+  }
+  expect(webContents.send).toHaveBeenCalledExactlyOnceWith('navigate-history', button)
+  for (const other of ['left', 'middle', 'right']) {
+    const event = { preventDefault: vi.fn() }
+    webContents.emit('before-mouse-event', event, { type: 'mouseUp', button: other })
+    expect(event.preventDefault).not.toHaveBeenCalled()
+  }
+  expect(webContents.send).toHaveBeenCalledTimes(1)
+})
+
 // A late detail fetch must not undo Back or overwrite a newer selection.
 it.each([null, { record_id: 2, title: 'Second' }])('ignores a stale game fetch after leaving its detail: %j', async (destination) => {
   const source = fs.readFileSync(path.join(__dirname, '../src/App.jsx'), 'utf8')
